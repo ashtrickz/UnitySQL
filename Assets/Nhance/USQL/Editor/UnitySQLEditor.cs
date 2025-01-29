@@ -18,7 +18,7 @@ public class UnitySQLManager : EditorWindow
     private string newColumnName = "";
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
-    private string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" }; // Available column types
+    private string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" }; // Available column types
 
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;

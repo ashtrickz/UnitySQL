@@ -86,8 +86,11 @@ public class Database
             {
                 command.ExecuteNonQuery();
             }
+
+            Debug.Log($"[SUCCESS] Column '{columnName}' ({columnType}) added to {tableName}");
         }
     }
+
 
     public List<string> GetColumnNames(string tableName)
     {
