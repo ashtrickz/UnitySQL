@@ -19,14 +19,14 @@ public class UnitySQLManager : EditorWindow
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
     private string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" }; // Available column types
-    
+
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
-    
+
     private string selectedTableForColumnsContext = "";
     private string selectedColumnForDeletion = "";
     private GenericMenu columnContextMenu;
-    
+
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
@@ -46,43 +46,88 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.EndHorizontal();
     }
 
+    private Dictionary<DatabaseConnection, bool> connectionStates = new Dictionary<DatabaseConnection, bool>();
+    private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
+
     private void DrawConnectionsPanel()
     {
-        EditorGUILayout.BeginVertical(GUILayout.Width(250));
+        EditorGUILayout.BeginVertical(GUILayout.Width(200));
         EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+
+        GUIStyle containerStyle = new GUIStyle("box");
+        containerStyle.padding = new RectOffset(5, 5, 5, 5);
+        containerStyle.margin = new RectOffset(5, 5, 5, 5);
 
         for (int i = 0; i < connections.Count; i++)
         {
             var connection = connections[i];
-            EditorGUILayout.BeginVertical("box");
 
-            EditorGUILayout.LabelField(connection.Name);
-
-            if (GUILayout.Button("Toggle Databases"))
+            if (!connectionStates.ContainsKey(connection))
             {
-                connection.ShowDatabases = !connection.ShowDatabases;
+                connectionStates[connection] = false;
             }
 
-            if (connection.ShowDatabases)
+            // Connection container
+            EditorGUILayout.BeginVertical(containerStyle);
+
+            bool isConnectionExpanded = connectionStates[connection];
+            string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+
+            if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
             {
-                foreach (var db in connection.Databases)
+                connectionStates[connection] = !isConnectionExpanded;
+            }
+
+            if (isConnectionExpanded)
+            {
+                foreach (var database in connection.Databases)
                 {
-                    if (GUILayout.Button(db.Name))
+                    if (!databaseStates.ContainsKey(database))
                     {
-                        selectedDatabaseIndex = connection.Databases.IndexOf(db);
+                        databaseStates[database] = false;
+                    }
+
+                    bool isDatabaseExpanded = databaseStates[database];
+                    string databaseArrow = isDatabaseExpanded ? "▼" : "▶";
+
+                    EditorGUILayout.BeginVertical(containerStyle);
+                    EditorGUILayout.BeginHorizontal();
+                    GUILayout.Space(15);
+
+                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel))
+                    {
+                        databaseStates[database] = !isDatabaseExpanded;
+                        selectedDatabaseIndex = connection.Databases.IndexOf(database);
                         selectedConnectionIndex = i;
                     }
+
+                    EditorGUILayout.EndHorizontal();
+
+                    if (isDatabaseExpanded)
+                    {
+                        foreach (var table in database.Tables)
+                        {
+                            EditorGUILayout.BeginHorizontal();
+                            GUILayout.Space(30);
+
+                            if (GUILayout.Button($"\t{table.Name}", EditorStyles.boldLabel))
+                            {
+                                selectedTableForContent = table.Name;
+                                database.LoadTableContent(selectedTableForContent);
+                            }
+
+                            EditorGUILayout.EndHorizontal();
+                        }
+                    }
+
+                    EditorGUILayout.EndVertical();
                 }
             }
 
-            if (GUILayout.Button("Remove Connection"))
-            {
-                connections.RemoveAt(i);
-                break;
-            }
-
-            EditorGUILayout.EndVertical();
+            EditorGUILayout.EndVertical(); // Close connection container
         }
+
+        EditorGUILayout.Space();
 
         if (GUILayout.Button("Add Connection"))
         {
@@ -91,6 +136,7 @@ public class UnitySQLManager : EditorWindow
 
         EditorGUILayout.EndVertical();
     }
+
 
     private void DrawRightPanel()
     {
@@ -132,125 +178,114 @@ public class UnitySQLManager : EditorWindow
             database.RefreshTables();
         }
 
-        foreach (var table in database.Tables)
-        {
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField(table.Name);
-
-            if (GUILayout.Button("View Content"))
-            {
-                selectedTableForContent = table.Name;
-                database.LoadTableContent(selectedTableForContent); // Fetch table data
-            }
-
-            if (GUILayout.Button("Remove Table"))
-            {
-                database.RemoveTable(table);
-            }
-
-            EditorGUILayout.EndHorizontal();
-        }
-        
-        DrawTableContentUI(database);
+        DrawTableContentUI(database); // Only show table content
     }
-    
+
+
     private void DrawTableContentUI(Database database)
-{
-    if (string.IsNullOrEmpty(selectedTableForContent))
     {
-        return;
-    }
-
-    var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
-    if (table == null)
-    {
-        return;
-    }
-
-    EditorGUILayout.LabelField($"Table Content: {selectedTableForContent}", EditorStyles.boldLabel);
-
-    if (GUILayout.Button("Refresh Content"))
-    {
-        database.LoadTableContent(selectedTableForContent);
-    }
-
-    scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
-
-    if (table.Data.Count > 0)
-    {
-        // COLUMN HEADERS with context menu support
-        EditorGUILayout.BeginHorizontal();
-        foreach (var columnName in table.Data[0].Keys)
+        if (string.IsNullOrEmpty(selectedTableForContent))
         {
-            GUIStyle columnStyle = new GUIStyle(GUI.skin.button);
-            columnStyle.normal.background = MakeTex(2, 2, new Color(0.2f, 0.5f, 0.2f, 0.8f)); // Slight transparency
-            columnStyle.alignment = TextAnchor.MiddleCenter;
-            columnStyle.padding = new RectOffset(5, 5, 2, 2);
-
-            Rect columnRect = GUILayoutUtility.GetRect(new GUIContent(columnName), columnStyle, GUILayout.Width(100));
-
-            if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && columnRect.Contains(Event.current.mousePosition))
-            {
-                ShowColumnContextMenu(columnName, selectedTableForContent);
-                Event.current.Use();
-            }
-
-            GUI.Label(columnRect, columnName, columnStyle);
+            return;
         }
 
-        // "+" button at the end of columns
-        if (GUILayout.Button("+", GUILayout.Width(30)))
+        var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
+        if (table == null)
         {
-            OpenAddColumnWindow(selectedTableForContent);
+            return;
         }
-        EditorGUILayout.EndHorizontal();
 
-        // TABLE ROWS with transparent cell styling
-        foreach (var row in table.Data)
+        EditorGUILayout.LabelField($"Table Content: {selectedTableForContent}", EditorStyles.boldLabel);
+
+        if (GUILayout.Button("Refresh Content"))
         {
+            database.LoadTableContent(selectedTableForContent);
+        }
+
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
+
+        if (table.Data.Count > 0)
+        {
+            // COLUMN HEADERS with context menu support
             EditorGUILayout.BeginHorizontal();
-            foreach (var column in row.Keys)
+            foreach (var columnName in table.Data[0].Keys)
             {
-                string cellValue = row[column]?.ToString() ?? "NULL";
+                GUIStyle columnStyle = new GUIStyle(GUI.skin.button);
+                columnStyle.normal.background =
+                    MakeTex(2, 2, new Color(0.2f, 0.5f, 0.2f, 0.8f)); // Slight transparency
+                columnStyle.alignment = TextAnchor.MiddleCenter;
+                columnStyle.padding = new RectOffset(5, 5, 2, 2);
 
-                GUIStyle cellStyle = new GUIStyle(GUI.skin.box);
-                cellStyle.normal.background = MakeTex(2, 2, new Color(0.15f, 0.15f, 0.15f, 0.1f)); // More transparent
-                cellStyle.alignment = TextAnchor.MiddleLeft;
-                cellStyle.padding = new RectOffset(5, 5, 2, 2);
+                Rect columnRect =
+                    GUILayoutUtility.GetRect(new GUIContent(columnName), columnStyle, GUILayout.Width(100));
 
-                Rect cellRect = GUILayoutUtility.GetRect(new GUIContent(cellValue), cellStyle, GUILayout.Width(100));
-
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && cellRect.Contains(Event.current.mousePosition))
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
+                    columnRect.Contains(Event.current.mousePosition))
                 {
-                    ShowCellContextMenu(selectedTableForContent, row, column, cellValue);
+                    ShowColumnContextMenu(columnName, selectedTableForContent);
                     Event.current.Use();
                 }
 
-                GUI.Label(cellRect, cellValue, cellStyle);
+                GUI.Label(columnRect, columnName, columnStyle);
             }
 
-            // "..." button to open row context menu
-            if (GUILayout.Button("...", GUILayout.Width(25)))
+            // "+" button at the end of columns
+            if (GUILayout.Button("+", GUILayout.Width(25)))
             {
-                ShowRowContextMenu(selectedTableForContent, row);
+                OpenAddColumnWindow(selectedTableForContent);
             }
 
             EditorGUILayout.EndHorizontal();
-        }
 
-        // "+" button below last row (Add New Row)
-        if (GUILayout.Button("+", GUILayout.Width(50)))
+            // TABLE ROWS with transparent cell styling
+            foreach (var row in table.Data)
+            {
+                EditorGUILayout.BeginHorizontal();
+                foreach (var column in row.Keys)
+                {
+                    string cellValue = row[column]?.ToString() ?? "NULL";
+
+                    GUIStyle cellStyle = new GUIStyle(GUI.skin.box);
+                    cellStyle.normal.background =
+                        MakeTex(2, 2, new Color(0.15f, 0.15f, 0.15f, 0.1f)); // More transparent
+                    cellStyle.alignment = TextAnchor.MiddleLeft;
+                    cellStyle.padding = new RectOffset(5, 5, 2, 2);
+
+                    Rect cellRect =
+                        GUILayoutUtility.GetRect(new GUIContent(cellValue), cellStyle, GUILayout.Width(100));
+
+                    if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
+                        cellRect.Contains(Event.current.mousePosition))
+                    {
+                        ShowCellContextMenu(selectedTableForContent, row, column, cellValue);
+                        Event.current.Use();
+                    }
+
+                    GUI.Label(cellRect, cellValue, cellStyle);
+                }
+
+                // "..." button to open row context menu
+                if (GUILayout.Button("...", GUILayout.Width(25)))
+                {
+                    ShowRowContextMenu(selectedTableForContent, row);
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            // "+" button below last row (Add New Row)
+            if (GUILayout.Button("+", GUILayout.Width(25)))
+            {
+                OpenAddRowWindow(selectedTableForContent);
+            }
+        }
+        else
         {
-            OpenAddRowWindow(selectedTableForContent);
+            EditorGUILayout.LabelField("No Data Found.");
         }
-    }
-    else
-    {
-        EditorGUILayout.LabelField("No Data Found.");
-    }
 
-    EditorGUILayout.EndScrollView();
-}
+        EditorGUILayout.EndScrollView();
+    }
 
 
     private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
@@ -261,16 +296,19 @@ public class UnitySQLManager : EditorWindow
         menu.ShowAsContext();
     }
 
-    private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName, string cellValue)
+    private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
+        string cellValue)
     {
         GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Change Value"), false, () => OpenChangeValueWindow(tableName, rowData, columnName, cellValue));
+        menu.AddItem(new GUIContent("Change Value"), false,
+            () => OpenChangeValueWindow(tableName, rowData, columnName, cellValue));
         menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
         menu.ShowAsContext();
     }
 
 
-    private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName, string cellValue)
+    private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
+        string cellValue)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
@@ -284,14 +322,14 @@ public class UnitySQLManager : EditorWindow
         }
     }
 
-    
+
     private void CopyCellToClipboard(string cellValue)
     {
         EditorGUIUtility.systemCopyBuffer = cellValue;
         Debug.Log($"[INFO] Copied value: {cellValue}");
     }
 
-    
+
     private void DuplicateRow(string tableName, Dictionary<string, object> rowData)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -302,7 +340,7 @@ public class UnitySQLManager : EditorWindow
     private void OpenDeleteRowWindow(string tableName, Dictionary<string, object> rowData)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-    
+
         if (database != null && rowData != null)
         {
             DeleteRowConfirmationWindow.ShowWindow(database, tableName, rowData);
@@ -314,7 +352,6 @@ public class UnitySQLManager : EditorWindow
     }
 
 
-    
     private void OpenAddRowWindow(string tableName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -331,7 +368,7 @@ public class UnitySQLManager : EditorWindow
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         AddColumnWindow.ShowWindow(database, tableName);
     }
-    
+
     private void ShowColumnContextMenu(string columnName, string tableName)
     {
         selectedColumnForDeletion = columnName;
@@ -343,30 +380,31 @@ public class UnitySQLManager : EditorWindow
         menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
         menu.ShowAsContext();
     }
-    
+
     private void OpenDeleteColumnWindow(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
     }
 
-    
+
     private void MakeColumnPrimaryKey(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         database.MakePrimaryKey(tableName, columnName);
         database.LoadTableContent(tableName);
     }
-    
+
     private void OpenRenameColumnWindow(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         RenameColumnWindow.ShowWindow(this, database, tableName, columnName);
     }
-    
+
     private void DeleteSelectedColumn()
     {
-        if (!string.IsNullOrEmpty(selectedColumnForDeletion) && !string.IsNullOrEmpty(selectedTableForColumnsContext))
+        if (!string.IsNullOrEmpty(selectedColumnForDeletion) &&
+            !string.IsNullOrEmpty(selectedTableForColumnsContext))
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
             database.RemoveColumnFromTable(selectedTableForColumnsContext, selectedColumnForDeletion);
@@ -380,7 +418,7 @@ public class UnitySQLManager : EditorWindow
         }
     }
 
-    
+
     private void DrawSQLExecutor()
     {
         EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);
@@ -408,7 +446,7 @@ public class UnitySQLManager : EditorWindow
             connections.Add(new DatabaseConnection(path));
         }
     }
-    
+
     private Texture2D MakeTex(int width, int height, Color col)
     {
         Texture2D result = new Texture2D(width, height);
@@ -423,8 +461,4 @@ public class UnitySQLManager : EditorWindow
         result.Apply();
         return result;
     }
-
-
-
 }
-
