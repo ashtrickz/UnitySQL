@@ -189,8 +189,6 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        EditorGUILayout.LabelField($"Database: {database.Name}", EditorStyles.boldLabel);
-
         DrawTableContentUI(database); // Only show table content
     }
 
@@ -211,8 +209,6 @@ public class UnitySQLManager : EditorWindow
         {
             return;
         }
-
-        EditorGUILayout.LabelField($"Table Content: {selectedTableForContent}", EditorStyles.boldLabel);
 
         // Fetch the primary key for the table
         string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
@@ -313,7 +309,7 @@ public class UnitySQLManager : EditorWindow
             EditorGUILayout.LabelField("No Data Found.");
 
             // "+" button below last row (Add New Row)
-            if (GUILayout.Button("Add first row"))
+            if (GUILayout.Button("Add first row (Press only if selected empty table!)"))
             {
                 OpenAddRowWindow(selectedTableForContent);
             }
