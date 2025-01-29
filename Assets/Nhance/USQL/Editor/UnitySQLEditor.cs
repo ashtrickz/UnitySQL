@@ -330,8 +330,6 @@ public class UnitySQLManager : EditorWindow
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         AddColumnWindow.ShowWindow(database, tableName);
     }
-
-
     
     private void ShowColumnContextMenu(string columnName, string tableName)
     {
@@ -340,9 +338,15 @@ public class UnitySQLManager : EditorWindow
 
         GenericMenu menu = new GenericMenu();
         menu.AddItem(new GUIContent("Rename Column"), false, () => OpenRenameColumnWindow(tableName, columnName));
-        menu.AddItem(new GUIContent("Delete Column"), false, DeleteSelectedColumn);
+        menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
         menu.ShowAsContext();
+    }
+    
+    private void OpenDeleteColumnWindow(string tableName, string columnName)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+        DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
     }
 
     
