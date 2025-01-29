@@ -51,7 +51,7 @@ public class CreateTableWindow : EditorWindow
                 break;
             }
 
-            columnNames[i] = EditorGUILayout.TextField(columnNames[i]);
+            columnNames[i] = EditorGUILayout.TextField(columnNames[i], GUILayout.Width(200));
             columnTypes[i] = availableColumnTypes[
                 EditorGUILayout.Popup(
                     Mathf.Clamp(System.Array.IndexOf(availableColumnTypes, columnTypes[i]), 0, availableColumnTypes.Length - 1),
@@ -59,7 +59,7 @@ public class CreateTableWindow : EditorWindow
                 )
             ];
 
-            EditorGUILayout.LabelField("Is Primary Key: ");
+            EditorGUILayout.LabelField("Is Primary Key: ", GUILayout.Width(90));
             bool currentPrimaryKey = EditorGUILayout.Toggle(isPrimaryKey[i], GUILayout.Width(20));
 
             if (currentPrimaryKey && !isPrimaryKey[i]) // If the checkbox was just selected

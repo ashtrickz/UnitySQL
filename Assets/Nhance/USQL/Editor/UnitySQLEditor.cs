@@ -48,98 +48,111 @@ public class UnitySQLManager : EditorWindow
     private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
 
     private void DrawConnectionsPanel()
+{
+    EditorGUILayout.BeginVertical(GUILayout.Width(200));
+    EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+
+    GUIStyle containerStyle = new GUIStyle("box")
     {
-        EditorGUILayout.BeginVertical(GUILayout.Width(200));
-        EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+        padding = new RectOffset(5, 5, 5, 5),
+        margin = new RectOffset(5, 5, 5, 5)
+    };
 
-        GUIStyle containerStyle = new GUIStyle("box")
+    for (int i = 0; i < connections.Count; i++)
+    {
+        var connection = connections[i];
+
+        if (!connectionStates.ContainsKey(connection))
         {
-            padding = new RectOffset(5, 5, 5, 5),
-            margin = new RectOffset(5, 5, 5, 5)
-        };
+            connectionStates[connection] = false;
+        }
 
-        for (int i = 0; i < connections.Count; i++)
+        EditorGUILayout.BeginVertical(containerStyle);
+
+        bool isConnectionExpanded = connectionStates[connection];
+        string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+
+        if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
         {
-            var connection = connections[i];
+            connectionStates[connection] = !isConnectionExpanded;
+        }
 
-            if (!connectionStates.ContainsKey(connection))
+        if (isConnectionExpanded)
+        {
+            foreach (var database in connection.Databases)
             {
-                connectionStates[connection] = false;
-            }
-
-            EditorGUILayout.BeginVertical(containerStyle);
-
-            bool isConnectionExpanded = connectionStates[connection];
-            string connectionArrow = isConnectionExpanded ? "▼" : "▶";
-
-            if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
-            {
-                connectionStates[connection] = !isConnectionExpanded;
-            }
-
-            if (isConnectionExpanded)
-            {
-                foreach (var database in connection.Databases)
+                if (!databaseStates.ContainsKey(database))
                 {
-                    if (!databaseStates.ContainsKey(database))
-                    {
-                        databaseStates[database] = false;
-                    }
-
-                    bool isDatabaseExpanded = databaseStates[database];
-                    string databaseArrow = isDatabaseExpanded ? "▼" : "▶";
-
-                    EditorGUILayout.BeginVertical(containerStyle);
-                    EditorGUILayout.BeginHorizontal();
-                    GUILayout.Space(15);
-
-                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel,
-                            GUILayout.ExpandWidth(true)))
-                    {
-                        databaseStates[database] = !isDatabaseExpanded;
-                        selectedDatabaseIndex = connection.Databases.IndexOf(database);
-                        selectedConnectionIndex = i;
-                    }
-                    // "+" Button for adding a new table (Right-Aligned)
-                    if (GUILayout.Button("+", GUILayout.Width(25)))
-                    {
-                        OpenCreateTableWindow(database);
-                    }
-                    EditorGUILayout.EndHorizontal();
-
-                    if (isDatabaseExpanded)
-                    {
-                        foreach (var table in database.Tables)
-                        {
-                            EditorGUILayout.BeginHorizontal();
-                            GUILayout.Space(30);
-
-                            if (GUILayout.Button($"\t {table.Name}", EditorStyles.boldLabel))
-                            {
-                                selectedTableForContent = table.Name;
-                                database.LoadTableContent(selectedTableForContent);
-                            }
-
-                            EditorGUILayout.EndHorizontal();
-                        }
-                    }
-
-                    EditorGUILayout.EndVertical();
+                    databaseStates[database] = false;
                 }
+
+                bool isDatabaseExpanded = databaseStates[database];
+                string databaseArrow = isDatabaseExpanded ? "▼" : "▶";
+
+                EditorGUILayout.BeginVertical(containerStyle);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Space(15);
+
+                if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel, GUILayout.ExpandWidth(true)))
+                {
+                    databaseStates[database] = !isDatabaseExpanded;
+                    selectedDatabaseIndex = connection.Databases.IndexOf(database);
+                    selectedConnectionIndex = i;
+                }
+
+                // "Refresh Tables" button (Left-Aligned)
+                if (GUILayout.Button("⟳", GUILayout.Width(25)))
+                {
+                    database.RefreshTables();
+                }
+
+                // "+" Button for adding a new table (Right-Aligned)
+                if (GUILayout.Button("+", GUILayout.Width(25)))
+                {
+                    OpenCreateTableWindow(database);
+                }
+
+                EditorGUILayout.EndHorizontal();
+
+                if (isDatabaseExpanded)
+                {
+                    foreach (var table in database.Tables)
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        GUILayout.Space(30);
+
+                        if (GUILayout.Button($" -\t {table.Name}", EditorStyles.boldLabel))
+                        {
+                            selectedTableForContent = table.Name;
+                            database.LoadTableContent(selectedTableForContent);
+                        }
+
+                        if (GUILayout.Button("⟳", GUILayout.Width(25)))
+                        {
+                            database.LoadTableContent(table.Name);
+                        }
+                        
+                        EditorGUILayout.EndHorizontal();
+                    }
+                }
+
+                EditorGUILayout.EndVertical();
             }
-
-            EditorGUILayout.EndVertical(); // Close connection container
         }
 
-        EditorGUILayout.Space();
-
-        if (GUILayout.Button("Add Connection"))
-        {
-            AddNewConnection();
-        }
-
-        EditorGUILayout.EndVertical();
+        EditorGUILayout.EndVertical(); // Close connection container
     }
+
+    EditorGUILayout.Space();
+
+    if (GUILayout.Button("Add Connection"))
+    {
+        AddNewConnection();
+    }
+
+    EditorGUILayout.EndVertical();
+}
+
 
 
     private void DrawRightPanel()
@@ -178,11 +191,6 @@ public class UnitySQLManager : EditorWindow
 
         EditorGUILayout.LabelField($"Database: {database.Name}", EditorStyles.boldLabel);
 
-        if (GUILayout.Button("Refresh Tables"))
-        {
-            database.RefreshTables();
-        }
-
         DrawTableContentUI(database); // Only show table content
     }
 
@@ -205,12 +213,7 @@ public class UnitySQLManager : EditorWindow
         }
 
         EditorGUILayout.LabelField($"Table Content: {selectedTableForContent}", EditorStyles.boldLabel);
-
-        if (GUILayout.Button("Refresh Content"))
-        {
-            database.LoadTableContent(selectedTableForContent);
-        }
-
+        
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
 
         if (table.Data.Count > 0)
