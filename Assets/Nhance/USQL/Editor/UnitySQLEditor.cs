@@ -291,6 +291,12 @@ public class UnitySQLManager : EditorWindow
         else
         {
             EditorGUILayout.LabelField("No Data Found.");
+            
+            // "+" button below last row (Add New Row)
+            if (GUILayout.Button("Add first row"))
+            {
+                OpenAddRowWindow(selectedTableForContent);
+            }
         }
 
         EditorGUILayout.EndScrollView();
