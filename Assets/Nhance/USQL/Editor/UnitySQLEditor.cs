@@ -19,12 +19,10 @@ public class UnitySQLManager : EditorWindow
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
     private string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" }; // Available column types
-
+    
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
-
-    private string selectedTableForColumnsContext = "";
-    private string selectedColumnForDeletion = "";
+    
     private GenericMenu columnContextMenu;
 
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
@@ -54,9 +52,11 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.BeginVertical(GUILayout.Width(200));
         EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
 
-        GUIStyle containerStyle = new GUIStyle("box");
-        containerStyle.padding = new RectOffset(5, 5, 5, 5);
-        containerStyle.margin = new RectOffset(5, 5, 5, 5);
+        GUIStyle containerStyle = new GUIStyle("box")
+        {
+            padding = new RectOffset(5, 5, 5, 5),
+            margin = new RectOffset(5, 5, 5, 5)
+        };
 
         for (int i = 0; i < connections.Count; i++)
         {
@@ -67,7 +67,6 @@ public class UnitySQLManager : EditorWindow
                 connectionStates[connection] = false;
             }
 
-            // Connection container
             EditorGUILayout.BeginVertical(containerStyle);
 
             bool isConnectionExpanded = connectionStates[connection];
@@ -94,13 +93,18 @@ public class UnitySQLManager : EditorWindow
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.Space(15);
 
-                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel))
+                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel,
+                            GUILayout.ExpandWidth(true)))
                     {
                         databaseStates[database] = !isDatabaseExpanded;
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
                         selectedConnectionIndex = i;
                     }
-
+                    // "+" Button for adding a new table (Right-Aligned)
+                    if (GUILayout.Button("+", GUILayout.Width(25)))
+                    {
+                        OpenCreateTableWindow(database);
+                    }
                     EditorGUILayout.EndHorizontal();
 
                     if (isDatabaseExpanded)
@@ -110,7 +114,7 @@ public class UnitySQLManager : EditorWindow
                             EditorGUILayout.BeginHorizontal();
                             GUILayout.Space(30);
 
-                            if (GUILayout.Button($"\t{table.Name}", EditorStyles.boldLabel))
+                            if (GUILayout.Button($"\t {table.Name}", EditorStyles.boldLabel))
                             {
                                 selectedTableForContent = table.Name;
                                 database.LoadTableContent(selectedTableForContent);
@@ -141,6 +145,7 @@ public class UnitySQLManager : EditorWindow
     private void DrawRightPanel()
     {
         EditorGUILayout.BeginVertical(style: "box");
+
         if (selectedConnectionIndex < 0 || selectedDatabaseIndex < 0)
         {
             EditorGUILayout.LabelField("Select a connection and database to manage.");
@@ -165,7 +170,7 @@ public class UnitySQLManager : EditorWindow
 
         EditorGUILayout.EndVertical();
     }
-
+    
     private void DrawDatabaseStructure()
     {
         var connection = connections[selectedConnectionIndex];
@@ -181,7 +186,11 @@ public class UnitySQLManager : EditorWindow
         DrawTableContentUI(database); // Only show table content
     }
 
-
+    private void OpenCreateTableWindow(Database database)
+    {
+        CreateTableWindow.ShowWindow(database);
+    }
+    
     private void DrawTableContentUI(Database database)
     {
         if (string.IsNullOrEmpty(selectedTableForContent))
@@ -371,9 +380,6 @@ public class UnitySQLManager : EditorWindow
 
     private void ShowColumnContextMenu(string columnName, string tableName)
     {
-        selectedColumnForDeletion = columnName;
-        selectedTableForColumnsContext = tableName;
-
         GenericMenu menu = new GenericMenu();
         menu.AddItem(new GUIContent("Rename Column"), false, () => OpenRenameColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
@@ -400,25 +406,7 @@ public class UnitySQLManager : EditorWindow
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
         RenameColumnWindow.ShowWindow(this, database, tableName, columnName);
     }
-
-    private void DeleteSelectedColumn()
-    {
-        if (!string.IsNullOrEmpty(selectedColumnForDeletion) &&
-            !string.IsNullOrEmpty(selectedTableForColumnsContext))
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            database.RemoveColumnFromTable(selectedTableForColumnsContext, selectedColumnForDeletion);
-
-            Debug.Log($"Deleted column: {selectedColumnForDeletion} from table: {selectedTableForColumnsContext}");
-
-            // Refresh table view
-            selectedColumnForDeletion = "";
-            selectedTableForColumnsContext = "";
-            database.LoadTableContent(selectedTableForContent);
-        }
-    }
-
-
+    
     private void DrawSQLExecutor()
     {
         EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);

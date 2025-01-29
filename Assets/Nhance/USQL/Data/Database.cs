@@ -41,6 +41,30 @@ public class Database
         // Logic for adding a new table
     }
 
+    public void CreateTable(string tableName, List<string> columnNames, List<string> columnTypes)
+    {
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            List<string> columns = new List<string>();
+            for (int i = 0; i < columnNames.Count; i++)
+            {
+                columns.Add($"{columnNames[i]} {columnTypes[i]}");
+            }
+
+            string query = $"CREATE TABLE {tableName} ({string.Join(", ", columns)});";
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(query, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            Debug.Log($"[SUCCESS] Table '{tableName}' created successfully.");
+            RefreshTables();
+        }
+    }
+
+    
     public void InsertIntoTable(string tableName, Dictionary<string, object> rowData)
     {
         var table = Tables.FirstOrDefault(t => t.Name == tableName);
