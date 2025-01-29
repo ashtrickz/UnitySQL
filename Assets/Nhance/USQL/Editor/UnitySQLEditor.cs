@@ -183,7 +183,7 @@ public class UnitySQLManager : EditorWindow
         foreach (var columnName in table.Data[0].Keys)
         {
             GUIStyle columnStyle = new GUIStyle(GUI.skin.button);
-            columnStyle.normal.background = MakeTex(2, 2, new Color(0.2f, 0.2f, 0.2f, 1f));
+            columnStyle.normal.background = MakeTex(2, 2, new Color(0.2f, 0.5f, 0.2f, 0.8f)); // Slight transparency
             columnStyle.alignment = TextAnchor.MiddleCenter;
             columnStyle.padding = new RectOffset(5, 5, 2, 2);
 
@@ -205,7 +205,7 @@ public class UnitySQLManager : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
-        // TABLE ROWS with "..." button for context menu
+        // TABLE ROWS with transparent cell styling
         foreach (var row in table.Data)
         {
             EditorGUILayout.BeginHorizontal();
@@ -213,8 +213,8 @@ public class UnitySQLManager : EditorWindow
             {
                 string cellValue = row[column]?.ToString() ?? "NULL";
 
-                GUIStyle cellStyle = new GUIStyle(GUI.skin.button);
-                cellStyle.normal.background = MakeTex(2, 2, new Color(0.15f, 0.15f, 0.15f, 1f));
+                GUIStyle cellStyle = new GUIStyle(GUI.skin.box);
+                cellStyle.normal.background = MakeTex(2, 2, new Color(0.15f, 0.15f, 0.15f, 0.1f)); // More transparent
                 cellStyle.alignment = TextAnchor.MiddleLeft;
                 cellStyle.padding = new RectOffset(5, 5, 2, 2);
 
@@ -251,6 +251,7 @@ public class UnitySQLManager : EditorWindow
 
     EditorGUILayout.EndScrollView();
 }
+
 
     private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
     {
@@ -410,16 +411,19 @@ public class UnitySQLManager : EditorWindow
     
     private Texture2D MakeTex(int width, int height, Color col)
     {
+        Texture2D result = new Texture2D(width, height);
         Color[] pix = new Color[width * height];
+
         for (int i = 0; i < pix.Length; i++)
         {
-            pix[i] = col;
+            pix[i] = col; // Preserve transparency
         }
-        Texture2D result = new Texture2D(width, height);
+
         result.SetPixels(pix);
         result.Apply();
         return result;
     }
+
 
 
 }
