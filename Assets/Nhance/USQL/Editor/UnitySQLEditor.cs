@@ -23,14 +23,42 @@ public class UnitySQLManager : EditorWindow
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
 
+    private const string SaveKey = "UnitySQLManager_SaveData";
+    
     private GenericMenu columnContextMenu;
 
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
-        GetWindow<UnitySQLManager>("Nhance Unity SQL Manager");
+        var window = GetWindow<UnitySQLManager>("Nhance Unity SQL Manager");
+        window.LoadSessionData();
     }
 
+
+    private void SaveSessionData()
+    {
+        List<string> connectionPaths = connections.Select(conn => conn.Path).ToList();
+        string json = JsonUtility.ToJson(new SaveData { Connections = connectionPaths });
+        EditorPrefs.SetString(SaveKey, json);
+    }
+
+    private void LoadSessionData()
+    {
+        if (!EditorPrefs.HasKey(SaveKey)) return;
+
+        string json = EditorPrefs.GetString(SaveKey);
+        SaveData saveData = JsonUtility.FromJson<SaveData>(json);
+
+        if (saveData?.Connections != null)
+        {
+            foreach (var path in saveData.Connections)
+            {
+                connections.Add(new DatabaseConnection(path));
+            }
+        }
+    }
+
+    
     private void OnGUI()
     {
         EditorGUILayout.BeginHorizontal();
@@ -454,8 +482,10 @@ public class UnitySQLManager : EditorWindow
         if (!string.IsNullOrEmpty(path))
         {
             connections.Add(new DatabaseConnection(path));
+            SaveSessionData(); // Save immediately after adding a new connection
         }
     }
+
 
     private Texture2D MakeTex(int width, int height, Color col)
     {
@@ -471,4 +501,11 @@ public class UnitySQLManager : EditorWindow
         result.Apply();
         return result;
     }
+    
+    [System.Serializable]
+    private class SaveData
+    {
+        public List<string> Connections;
+    }
+
 }
