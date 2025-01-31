@@ -50,7 +50,10 @@ public class Database
             List<string> columns = new List<string>();
             for (int i = 0; i < columnNames.Count; i++)
             {
-                columns.Add($"{columnNames[i]} {columnTypes[i]}");
+                string type = columnTypes[i];
+                if (type == "Vector2" || type == "Vector3" || type == "GameObject") type = "TEXT";
+                if (type == "Sprite") type = "BLOB";
+                columns.Add($"{columnNames[i]} {type}");
             }
 
             string query = $"CREATE TABLE {tableName} ({string.Join(", ", columns)});";
@@ -58,21 +61,45 @@ public class Database
             {
                 command.ExecuteNonQuery();
             }
-
-            Debug.Log($"[SUCCESS] Table '{tableName}' created successfully.");
-            RefreshTables();
         }
     }
-
-
+    
     public void InsertIntoTable(string tableName, Dictionary<string, object> rowData)
     {
         var table = Tables.FirstOrDefault(t => t.Name == tableName);
         if (table != null)
         {
-            table.InsertData(rowData, Path);
+            // Convert custom types to storable formats
+            Dictionary<string, object> serializedData = new Dictionary<string, object>();
+
+            foreach (var entry in rowData)
+            {
+                if (entry.Value is Vector2 vector2)
+                {
+                    serializedData[entry.Key] = $"{vector2.x},{vector2.y}";
+                }
+                else if (entry.Value is Vector3 vector3)
+                {
+                    serializedData[entry.Key] = $"{vector3.x},{vector3.y},{vector3.z}";
+                }
+                else if (entry.Value is Sprite sprite)
+                {
+                    serializedData[entry.Key] = sprite.texture.EncodeToPNG(); // Convert to PNG bytes
+                }
+                else if (entry.Value is GameObject gameObject)
+                {
+                    serializedData[entry.Key] = JsonUtility.ToJson(new GameObjectData(gameObject));
+                }
+                else
+                {
+                    serializedData[entry.Key] = entry.Value;
+                }
+            }
+
+            table.InsertData(serializedData, Path);
         }
     }
+
 
     public void AddColumnToTable(string tableName, string columnName, string columnType)
     {

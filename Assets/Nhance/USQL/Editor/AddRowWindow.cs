@@ -32,7 +32,34 @@ public class AddRowWindow : EditorWindow
         List<string> keys = new List<string>(columnValues.Keys);
         for (int i = 0; i < keys.Count; i++)
         {
-            columnValues[keys[i]] = EditorGUILayout.TextField(keys[i] + ":", columnValues[keys[i]]);
+            string key = keys[i];
+
+            if (columnValues[key].StartsWith("Vector2"))
+            {
+                Vector2 vec2 = Vector2.zero;
+                columnValues[key] = EditorGUILayout.Vector2Field(key + ":", vec2).ToString();
+            }
+            else if (columnValues[key].StartsWith("Vector3"))
+            {
+                Vector3 vec3 = Vector3.zero;
+                columnValues[key] = EditorGUILayout.Vector3Field(key + ":", vec3).ToString();
+            }
+            else if (columnValues[key].StartsWith("Sprite"))
+            {
+                Sprite sprite = null;
+                sprite = (Sprite)EditorGUILayout.ObjectField(key + ":", sprite, typeof(Sprite), false);
+                columnValues[key] = sprite != null ? JsonUtility.ToJson(sprite) : "";
+            }
+            else if (columnValues[key].StartsWith("GameObject"))
+            {
+                GameObject gameObject = null;
+                gameObject = (GameObject)EditorGUILayout.ObjectField(key + ":", gameObject, typeof(GameObject), false);
+                columnValues[key] = gameObject != null ? JsonUtility.ToJson(new GameObjectData(gameObject)) : "";
+            }
+            else
+            {
+                columnValues[key] = EditorGUILayout.TextField(key + ":", columnValues[key]);
+            }
         }
 
         EditorGUILayout.Space();
@@ -47,10 +74,7 @@ public class AddRowWindow : EditorWindow
             }
 
             database.InsertIntoTable(tableName, rowData);
-            Debug.Log($"New row added to {tableName}");
-
             database.LoadTableContent(tableName);
-            
             Close();
         }
 
@@ -61,4 +85,5 @@ public class AddRowWindow : EditorWindow
 
         EditorGUILayout.EndHorizontal();
     }
+
 }

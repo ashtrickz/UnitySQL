@@ -7,7 +7,8 @@ public class AddColumnWindow : EditorWindow
     private static string tableName;
     private static string newColumnName = "";
     private static int selectedColumnTypeIndex = 0; // Default type is TEXT
-    private static readonly string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" };
+    private static readonly string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "Vector2", "Vector3", "Sprite", "GameObject" };
+
 
     public static void ShowWindow(Database db, string tblName)
     {
@@ -56,6 +57,9 @@ public class AddColumnWindow : EditorWindow
 
         string selectedColumnType = availableColumnTypes[selectedColumnTypeIndex];
         database.AddColumnToTable(tableName, newColumnName, selectedColumnType);
+        
+        database.LoadTableContent(tableName);
+        
         Close();
     }
 }

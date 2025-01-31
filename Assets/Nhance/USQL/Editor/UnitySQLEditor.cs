@@ -5,7 +5,7 @@ using System.Data;
 using System.Data.Sql;
 using System.Linq;
 
-public class UnitySQLManager : EditorWindow
+public partial class UnitySQLManager : EditorWindow
 {
     private List<DatabaseConnection> connections = new List<DatabaseConnection>();
     private int selectedConnectionIndex = -1;

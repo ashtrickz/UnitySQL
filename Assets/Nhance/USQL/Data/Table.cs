@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Data.Sqlite;
+using UnityEngine;
 
 public class Table
 {
@@ -14,50 +15,58 @@ public class Table
     }
 
     public void LoadContent(string databasePath)
+{
+    Data.Clear();
+
+    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Version=3;"))
     {
-        Data.Clear();
+        connection.Open();
 
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Version=3;"))
+        using (var command = new Mono.Data.Sqlite.SqliteCommand($"SELECT * FROM {Name};", connection))
+        using (var reader = command.ExecuteReader())
         {
-            connection.Open();
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand($"SELECT * FROM {Name};", connection))
-            using (var reader = command.ExecuteReader())
+            while (reader.Read())
             {
-                while (reader.Read())
+                var row = new Dictionary<string, object>();
+                for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    var row = new Dictionary<string, object>();
-                    for (int i = 0; i < reader.FieldCount; i++)
-                    {
-                        object value = reader.GetValue(i);
+                    string columnName = reader.GetName(i);
+                    object value = reader.GetValue(i);
 
-                        // Explicitly store numeric values in the correct type
-                        if (value is Int64 int64Value)
+                    if (value is string strValue)
+                    {
+                        if (strValue.Contains(",") && strValue.Split(',').Length == 2)
                         {
-                            row[reader.GetName(i)] = int64Value; // Keep it as Int64 (long)
+                            string[] parts = strValue.Split(',');
+                            row[columnName] = new Vector2(float.Parse(parts[0]), float.Parse(parts[1]));
                         }
-                        else if (value is Int32 int32Value)
+                        else if (strValue.Contains(",") && strValue.Split(',').Length == 3)
                         {
-                            row[reader.GetName(i)] = int32Value; // Keep as Int32
-                        }
-                        else if (value is double doubleValue)
-                        {
-                            row[reader.GetName(i)] = doubleValue; // Store as double
-                        }
-                        else if (value is float floatValue)
-                        {
-                            row[reader.GetName(i)] = floatValue; // Store as float
+                            string[] parts = strValue.Split(',');
+                            row[columnName] = new Vector3(float.Parse(parts[0]), float.Parse(parts[1]), float.Parse(parts[2]));
                         }
                         else
                         {
-                            row[reader.GetName(i)] = value?.ToString(); // Convert everything else to string
+                            row[columnName] = strValue;
                         }
                     }
-                    Data.Add(row);
+                    else if (value is byte[] imageData)
+                    {
+                        Texture2D texture = new Texture2D(2, 2);
+                        texture.LoadImage(imageData);
+                        row[columnName] = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                    }
+                    else
+                    {
+                        row[columnName] = value;
+                    }
                 }
+                Data.Add(row);
             }
         }
     }
+}
+
 
 
 
