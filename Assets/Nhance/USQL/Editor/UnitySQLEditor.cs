@@ -24,7 +24,7 @@ public class UnitySQLManager : EditorWindow
     private Vector2 scrollPosition;
 
     private const string SaveKey = "UnitySQLManager_SaveData";
-    
+
     private GenericMenu columnContextMenu;
 
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
@@ -34,13 +34,65 @@ public class UnitySQLManager : EditorWindow
         window.LoadSessionData();
     }
 
-
     private void SaveSessionData()
     {
-        List<string> connectionPaths = connections.Select(conn => conn.Path).ToList();
-        string json = JsonUtility.ToJson(new SaveData { Connections = connectionPaths });
+        SaveData saveData = new SaveData();
+        if (EditorPrefs.HasKey(SaveKey))
+        {
+            string existingJson = EditorPrefs.GetString(SaveKey);
+            saveData = JsonUtility.FromJson<SaveData>(existingJson);
+        }
+
+        // Store connection paths
+        saveData.Connections = connections.Select(conn => conn.Path).ToList();
+
+        // Convert ExpandedConnections dictionary to list
+        saveData.ExpandedConnections = new List<KeyValuePairStringBool>();
+        foreach (var pair in connectionStates)
+        {
+            saveData.ExpandedConnections.Add(new KeyValuePairStringBool { Key = pair.Key.Path, Value = pair.Value });
+        }
+
+        // Convert ExpandedDatabases dictionary to list
+        saveData.ExpandedDatabases = new List<KeyValuePairStringList>();
+        foreach (var connection in connections)
+        {
+            if (connection.Databases.Count > 0)
+            {
+                List<string> expandedDbs = connection.Databases
+                    .Where(db => databaseStates.ContainsKey(db) && databaseStates[db])
+                    .Select(db => db.Name)
+                    .ToList();
+
+                saveData.ExpandedDatabases.Add(
+                    new KeyValuePairStringList { Key = connection.Path, Value = expandedDbs });
+            }
+        }
+
+        // Convert OpenedTables dictionary to list
+        saveData.OpenedTables = new List<KeyValuePairStringString>();
+        foreach (var connection in connections)
+        {
+            if (saveData.OpenedTables.Any(entry => entry.Key == connection.Path)) continue;
+
+            if (selectedConnectionIndex >= 0 && selectedDatabaseIndex >= 0 &&
+                connections[selectedConnectionIndex] == connection)
+            {
+                if (!string.IsNullOrEmpty(selectedTableForContent))
+                {
+                    saveData.OpenedTables.Add(new KeyValuePairStringString
+                        { Key = connection.Path, Value = selectedTableForContent });
+                }
+            }
+        }
+
+        // Convert to JSON and save
+        string json = JsonUtility.ToJson(saveData, true);
         EditorPrefs.SetString(SaveKey, json);
+
+        Debug.Log($"[DEBUG] Successfully Saved JSON:\n{json}");
     }
+
 
     private void LoadSessionData()
     {
@@ -53,12 +105,64 @@ public class UnitySQLManager : EditorWindow
         {
             foreach (var path in saveData.Connections)
             {
-                connections.Add(new DatabaseConnection(path));
+                var connection = new DatabaseConnection(path);
+                connections.Add(connection);
             }
         }
+
+        // Convert ExpandedConnections list back into dictionary
+        connectionStates.Clear();
+        foreach (var pair in saveData.ExpandedConnections)
+        {
+            var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
+            if (connection != null)
+            {
+                connectionStates[connection] = pair.Value;
+            }
+        }
+
+        // Convert ExpandedDatabases list back into dictionary
+        databaseStates.Clear();
+        foreach (var pair in saveData.ExpandedDatabases)
+        {
+            var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
+            if (connection != null)
+            {
+                foreach (var db in connection.Databases)
+                {
+                    if (pair.Value.Contains(db.Name))
+                    {
+                        databaseStates[db] = true;
+                    }
+                }
+            }
+        }
+
+        // Convert OpenedTables list back into dictionary and restore selected table
+        if (saveData.OpenedTables.Count > 0)
+        {
+            foreach (var pair in saveData.OpenedTables)
+            {
+                var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
+                if (connection != null && connection.Databases.Count > 0)
+                {
+                    selectedConnectionIndex = connections.IndexOf(connection);
+                    selectedDatabaseIndex = 0;
+                    selectedTableForContent = pair.Value;
+
+                    var database = connection.Databases[selectedDatabaseIndex];
+                    database.LoadTableContent(pair.Value);
+
+                    Debug.Log($"[DEBUG] Restored Opened Table: {pair.Value} for {connection.Path}");
+                }
+            }
+        }
+
+        Repaint();
+        Debug.Log("[DEBUG] Successfully Loaded Session Data");
     }
 
-    
+
     private void OnGUI()
     {
         EditorGUILayout.BeginHorizontal();
@@ -103,6 +207,7 @@ public class UnitySQLManager : EditorWindow
             if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
             {
                 connectionStates[connection] = !isConnectionExpanded;
+                SaveSessionData();
             }
 
             if (isConnectionExpanded)
@@ -127,6 +232,7 @@ public class UnitySQLManager : EditorWindow
                         databaseStates[database] = !isDatabaseExpanded;
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
                         selectedConnectionIndex = i;
+                        SaveSessionData();
                     }
 
                     // "Refresh Tables" button (Left-Aligned)
@@ -154,6 +260,7 @@ public class UnitySQLManager : EditorWindow
                             {
                                 selectedTableForContent = table.Name;
                                 database.LoadTableContent(selectedTableForContent);
+                                SaveSessionData();
                             }
 
                             if (GUILayout.Button("⟳", GUILayout.Width(25)))
@@ -486,7 +593,6 @@ public class UnitySQLManager : EditorWindow
         }
     }
 
-
     private Texture2D MakeTex(int width, int height, Color col)
     {
         Texture2D result = new Texture2D(width, height);
@@ -501,11 +607,40 @@ public class UnitySQLManager : EditorWindow
         result.Apply();
         return result;
     }
-    
+
+    [System.Serializable]
+    private class KeyValuePairStringBool
+    {
+        public string Key;
+        public bool Value;
+    }
+
+    [System.Serializable]
+    private class KeyValuePairStringList
+    {
+        public string Key;
+        public List<string> Value;
+    }
+
+    [System.Serializable]
+    private class KeyValuePairStringString
+    {
+        public string Key;
+        public string Value;
+    }
+
     [System.Serializable]
     private class SaveData
     {
-        public List<string> Connections;
-    }
+        public List<string> Connections = new List<string>(); // Stores connection paths
 
+        public List<KeyValuePairStringBool>
+            ExpandedConnections = new List<KeyValuePairStringBool>(); // Stores expanded state of connections
+
+        public List<KeyValuePairStringList>
+            ExpandedDatabases = new List<KeyValuePairStringList>(); // Stores expanded databases per connection
+
+        public List<KeyValuePairStringString>
+            OpenedTables = new List<KeyValuePairStringString>(); // Stores last selected table per connection
+    }
 }
