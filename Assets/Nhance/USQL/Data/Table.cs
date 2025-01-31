@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Data.Sqlite;
+using UnityEditor;
 using UnityEngine;
 
 public class Table
@@ -15,59 +16,50 @@ public class Table
     }
 
     public void LoadContent(string databasePath)
-{
-    Data.Clear();
-
-    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={databasePath};Version=3;"))
     {
-        connection.Open();
+        Data.Clear();
 
-        using (var command = new Mono.Data.Sqlite.SqliteCommand($"SELECT * FROM {Name};", connection))
-        using (var reader = command.ExecuteReader())
+        using (var connection = new SqliteConnection($"Data Source={databasePath};Version=3;"))
         {
-            while (reader.Read())
-            {
-                var row = new Dictionary<string, object>();
-                for (int i = 0; i < reader.FieldCount; i++)
-                {
-                    string columnName = reader.GetName(i);
-                    object value = reader.GetValue(i);
+            connection.Open();
 
-                    if (value is string strValue)
+            using (var command = new SqliteCommand($"SELECT * FROM {Name};", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    var row = new Dictionary<string, object>();
+
+                    for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        if (strValue.Contains(",") && strValue.Split(',').Length == 2)
+                        string columnName = reader.GetName(i);
+                        object value = reader.GetValue(i);
+
+                        if (value is string strValue && string.IsNullOrEmpty(strValue))
                         {
-                            string[] parts = strValue.Split(',');
-                            row[columnName] = new Vector2(float.Parse(parts[0]), float.Parse(parts[1]));
+                            row[columnName] = null; // Convert empty strings to null
                         }
-                        else if (strValue.Contains(",") && strValue.Split(',').Length == 3)
+                        else if (columnName.Contains("GameObject"))
                         {
-                            string[] parts = strValue.Split(',');
-                            row[columnName] = new Vector3(float.Parse(parts[0]), float.Parse(parts[1]), float.Parse(parts[2]));
+                            string prefabPath = value.ToString();
+                            row[columnName] = string.IsNullOrEmpty(prefabPath) ? null : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                        }
+                        else if (columnName.Contains("Sprite"))
+                        {
+                            string spritePath = value.ToString();
+                            row[columnName] = string.IsNullOrEmpty(spritePath) ? null : AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
                         }
                         else
                         {
-                            row[columnName] = strValue;
+                            row[columnName] = value;
                         }
                     }
-                    else if (value is byte[] imageData)
-                    {
-                        Texture2D texture = new Texture2D(2, 2);
-                        texture.LoadImage(imageData);
-                        row[columnName] = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
-                    }
-                    else
-                    {
-                        row[columnName] = value;
-                    }
+
+                    Data.Add(row);
                 }
-                Data.Add(row);
             }
         }
     }
-}
-
-
 
 
     public void InsertData(Dictionary<string, object> rowData, string databasePath)

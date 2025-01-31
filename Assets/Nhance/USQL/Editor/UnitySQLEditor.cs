@@ -333,126 +333,92 @@ public partial class UnitySQLManager : EditorWindow
     }
 
     private void DrawTableContentUI(Database database)
+{
+    if (string.IsNullOrEmpty(selectedTableForContent)) return;
+
+    var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
+    if (table == null) return;
+
+    string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
+    scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
+
+    if (table.Data.Count > 0)
     {
-        if (string.IsNullOrEmpty(selectedTableForContent))
+        // **Column Headers with Right-Click Menu**
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        foreach (var column in table.Data[0].Keys)
         {
-            return;
-        }
+            string displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
+            GUIStyle columnStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
 
-        var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
-        if (table == null)
-        {
-            return;
-        }
+            Rect headerRect = GUILayoutUtility.GetRect(120, 25);
+            GUI.Box(headerRect, displayColumn, columnStyle);
 
-        // Fetch the primary key for the table
-        string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
-
-        if (table.Data.Count > 0)
-        {
-            // COLUMN HEADERS with primary key visualization
-            EditorGUILayout.BeginHorizontal();
-            foreach (var originalColumnName in table.Data[0].Keys)
+            // **Right-Click Context Menu for Column Headers**
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && headerRect.Contains(Event.current.mousePosition))
             {
-                GUIStyle columnStyle = new GUIStyle(GUI.skin.button);
-                columnStyle.alignment = TextAnchor.MiddleCenter;
-                columnStyle.padding = new RectOffset(5, 5, 2, 2);
+                ShowColumnContextMenu(column, selectedTableForContent);
+                Event.current.Use();
+            }
+        }
+        if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25))) OpenAddColumnWindow(selectedTableForContent);
+        EditorGUILayout.EndHorizontal();
 
-                string displayColumnName = originalColumnName; // Temporary variable
+        // **Table Rows**
+        foreach (var row in table.Data)
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-                // Highlight Primary Key Column
-                if (displayColumnName == primaryKeyColumn)
+            foreach (var column in row.Keys)
+            {
+                object value = row[column];
+
+                Rect cellRect = GUILayoutUtility.GetRect(120, 25);
+                GUI.Box(cellRect, "", EditorStyles.helpBox);
+
+                // **Right-Click Context Menu for Cells**
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && cellRect.Contains(Event.current.mousePosition))
                 {
-                    columnStyle.normal.textColor = Color.green; // Change text color
-                    displayColumnName = $"🔑 {displayColumnName}"; // Add key icon
-                }
-
-                Rect columnRect = GUILayoutUtility.GetRect(new GUIContent(displayColumnName), columnStyle,
-                    GUILayout.Width(101));
-
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
-                    columnRect.Contains(Event.current.mousePosition))
-                {
-                    ShowColumnContextMenu(originalColumnName, selectedTableForContent);
+                    ShowCellContextMenu(selectedTableForContent, row, column, ConvertValueToString(value));
                     Event.current.Use();
                 }
 
-                GUI.Label(columnRect, displayColumnName, columnStyle);
-            }
+                // **Ensure SerializedObject for Higher Types**
+                SerializedObject serializedObject = new SerializedObject(this);
+                SerializedProperty property = serializedObject.FindProperty(column);
 
-// "+" button at the end of columns
-            if (GUILayout.Button("+", GUILayout.Width(25)))
-            {
-                OpenAddColumnWindow(selectedTableForContent);
-            }
+                GUIStyle cellStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
 
-            EditorGUILayout.EndHorizontal();
-
-
-            // TABLE ROWS with transparent cell styling
-            foreach (var row in table.Data)
-            {
-                EditorGUILayout.BeginHorizontal();
-                foreach (var column in row.Keys)
+                // **GameObject and Sprite Fields**
+                if (column.Contains("GameObject") || column.Contains("Sprite") || column.Contains("higher"))
                 {
-                    string cellValue = row[column]?.ToString() ?? "NULL";
-
-                    GUIStyle cellStyle = new GUIStyle(GUI.skin.box);
-                    cellStyle.normal.background = MakeTex(2, 2, new Color(0.15f, 0.15f, 0.15f, 0.1f));
-                    cellStyle.alignment = TextAnchor.MiddleLeft;
-                    cellStyle.padding = new RectOffset(5, 5, 2, 2);
-
-                    // Highlight Primary Key Cell
-                    if (column == primaryKeyColumn)
+                    EditorGUI.BeginChangeCheck();
+                    Object newObject = EditorGUI.ObjectField(cellRect, (Object)value, column.Contains("GameObject") ? typeof(GameObject) : typeof(Sprite), false);
+                    if (EditorGUI.EndChangeCheck())
                     {
-                        cellStyle.normal.textColor = Color.green; // Change text color
-                        cellValue = $"🔑 {cellValue}"; // Add key icon
+                        UpdateCellValue(selectedTableForContent, row, column, newObject);
                     }
-
-                    Rect cellRect =
-                        GUILayoutUtility.GetRect(new GUIContent(cellValue), cellStyle, GUILayout.Width(100));
-
-                    if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
-                        cellRect.Contains(Event.current.mousePosition))
-                    {
-                        ShowCellContextMenu(selectedTableForContent, row, column, cellValue);
-                        Event.current.Use();
-                    }
-
+                }
+                // **Standard Label for Text/Numeric Values**
+                else
+                {
+                    string cellValue = value?.ToString() ?? "NULL";
                     GUI.Label(cellRect, cellValue, cellStyle);
                 }
-
-                // "..." button to open row context menu
-                if (GUILayout.Button("...", GUILayout.Width(25)))
-                {
-                    ShowRowContextMenu(selectedTableForContent, row);
-                }
-
-                EditorGUILayout.EndHorizontal();
             }
-
-            // "+" button below last row (Add New Row)
-            if (GUILayout.Button("+", GUILayout.Width(25)))
-            {
-                OpenAddRowWindow(selectedTableForContent);
-            }
-        }
-        else
-        {
-            EditorGUILayout.LabelField("No Data Found.");
-
-            // "+" button below last row (Add New Row)
-            if (GUILayout.Button("Add first row (Press only if selected empty table!)"))
-            {
-                OpenAddRowWindow(selectedTableForContent);
-            }
+            if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25))) ShowRowContextMenu(selectedTableForContent, row);
+            EditorGUILayout.EndHorizontal();
         }
 
-        EditorGUILayout.EndScrollView();
+        if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
     }
-
+    else
+    {
+        EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
+        if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
+    }
+    EditorGUILayout.EndScrollView();
+}
 
     private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
     {
@@ -471,6 +437,26 @@ public partial class UnitySQLManager : EditorWindow
         menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
         menu.ShowAsContext();
     }
+    
+    private string ConvertValueToString(object value)
+    {
+        if (value == null)
+            return ""; // Now shows an empty field instead of "NULL"
+
+        if (value is Vector2 vector2)
+            return $"{vector2.x}, {vector2.y}";
+
+        if (value is Vector3 vector3)
+            return $"{vector3.x}, {vector3.y}, {vector3.z}";
+
+        if (value is Sprite sprite)
+            return sprite != null ? $"[Sprite] {sprite.name}" : "";
+
+        if (value is GameObject gameObject)
+            return gameObject != null ? $"[GameObject] {gameObject.name}" : "";
+
+        return value.ToString();
+    }
 
 
     private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
@@ -488,7 +474,45 @@ public partial class UnitySQLManager : EditorWindow
         }
     }
 
+    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, object newValue)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
+        if (database != null)
+        {
+            string convertedValue = "";
+
+            if (newValue == null)
+            {
+                convertedValue = ""; // Store as empty string in database
+            }
+            else if (newValue is Vector2 vector2)
+            {
+                convertedValue = $"{vector2.x},{vector2.y}";
+            }
+            else if (newValue is Vector3 vector3)
+            {
+                convertedValue = $"{vector3.x},{vector3.y},{vector3.z}";
+            }
+            else if (newValue is Sprite sprite)
+            {
+                convertedValue = AssetDatabase.GetAssetPath(sprite); // Store Sprite Asset Path
+            }
+            else if (newValue is GameObject gameObject)
+            {
+                convertedValue = AssetDatabase.GetAssetPath(gameObject); // Store GameObject Prefab Path
+            }
+            else
+            {
+                convertedValue = newValue.ToString();
+            }
+
+            database.UpdateCellValue(tableName, rowData, columnName, convertedValue);
+            database.LoadTableContent(tableName);
+        }
+    }
+
+    
     private void CopyCellToClipboard(string cellValue)
     {
         EditorGUIUtility.systemCopyBuffer = cellValue;
