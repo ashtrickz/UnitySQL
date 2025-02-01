@@ -10,7 +10,7 @@ public partial class UnitySQLManager : EditorWindow
     private List<DatabaseConnection> connections = new List<DatabaseConnection>();
     private int selectedConnectionIndex = -1;
     private int selectedDatabaseIndex = -1;
-    private string[] tabs = { "Database Structure", "SQL", "Placeholder" };
+    private string[] tabs = {"Database Structure", "SQL", "Placeholder"};
     private int selectedTab = 0;
     private string selectedTable;
     private string newEntryData = "";
@@ -18,7 +18,7 @@ public partial class UnitySQLManager : EditorWindow
     private string newColumnName = "";
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
-    private string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" }; // Available column types
+    private string[] availableColumnTypes = {"TEXT", "INTEGER", "REAL", "BLOB"}; // Available column types
 
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
@@ -45,7 +45,7 @@ public partial class UnitySQLManager : EditorWindow
         saveData.ExpandedConnections = new List<KeyValuePairStringBool>();
         foreach (var pair in connectionStates)
         {
-            saveData.ExpandedConnections.Add(new KeyValuePairStringBool { Key = pair.Key.Path, Value = pair.Value });
+            saveData.ExpandedConnections.Add(new KeyValuePairStringBool {Key = pair.Key.Path, Value = pair.Value});
         }
 
         // Store expanded states for databases
@@ -60,7 +60,7 @@ public partial class UnitySQLManager : EditorWindow
                     .ToList();
 
                 saveData.ExpandedDatabases.Add(
-                    new KeyValuePairStringList { Key = connection.Path, Value = expandedDbs });
+                    new KeyValuePairStringList {Key = connection.Path, Value = expandedDbs});
             }
         }
 
@@ -76,7 +76,7 @@ public partial class UnitySQLManager : EditorWindow
                 if (!string.IsNullOrEmpty(selectedTableForContent))
                 {
                     saveData.OpenedTables.Add(new KeyValuePairStringString
-                        { Key = connection.Path, Value = selectedTableForContent });
+                        {Key = connection.Path, Value = selectedTableForContent});
                 }
             }
         }
@@ -360,7 +360,7 @@ public partial class UnitySQLManager : EditorWindow
             {
                 string displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
                 GUIStyle columnStyle = new GUIStyle(GUI.skin.label)
-                    { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+                    {alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold};
 
                 Rect headerRect = GUILayoutUtility.GetRect(120, 25);
                 GUI.Box(headerRect, displayColumn, columnStyle);
@@ -417,7 +417,7 @@ public partial class UnitySQLManager : EditorWindow
                     {
                         string cellValue = value?.ToString() ?? ""; // Remove "NULL" label
                         GUI.Label(cellRect, cellValue,
-                            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter });
+                            new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter});
                     }
                 }
 
@@ -468,7 +468,6 @@ public partial class UnitySQLManager : EditorWindow
             DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
         }
     }
-
 
 
     private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
@@ -570,7 +569,7 @@ public partial class UnitySQLManager : EditorWindow
     {
         CreateDatabaseWindow.ShowWindow(this, connection);
     }
-    
+
     private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
         object newValue)
     {
@@ -762,6 +761,7 @@ public partial class UnitySQLManager : EditorWindow
         {
             return database.CheckPrimaryKeyExists(tableName, primaryKeyColumn, keyValue);
         }
+
         return false;
     }
 
@@ -775,5 +775,4 @@ public partial class UnitySQLManager : EditorWindow
             database.LoadTableContent(tableName);
         }
     }
-
 }
