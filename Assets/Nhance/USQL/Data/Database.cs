@@ -101,29 +101,53 @@ public class Database
     }
 
     public string GetColumnType(string tableName, string columnName)
+{
+    using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        connection.Open();
+
+        using (var command = new SqliteCommand($"PRAGMA table_info({tableName});", connection))
+        using (var reader = command.ExecuteReader())
         {
-            connection.Open();
-
-            using (var command = new SqliteCommand($"PRAGMA table_info({tableName});", connection))
-            using (var reader = command.ExecuteReader())
+            while (reader.Read())
             {
-                while (reader.Read())
-                {
-                    string colName = reader.GetString(1); // Column name
-                    string colType = reader.GetString(2); // Column type
+                string colName = reader.GetString(1);
+                string colType = reader.GetString(2);
 
-                    if (colName == columnName)
+                if (colName == columnName)
+                {
+                    // **Check if stored as TEXT but is actually Vector2 or Vector3**
+                    if (colType == "TEXT")
                     {
-                        return colType; // Return the actual SQLite column type
+                        try
+                        {
+                            using (var typeCheckCmd = new SqliteCommand($"SELECT {columnName} FROM {tableName} LIMIT 1;", connection))
+                            using (var typeCheckReader = typeCheckCmd.ExecuteReader())
+                            {
+                                if (typeCheckReader.Read() && typeCheckReader[0] is string sampleValue)
+                                {
+                                    if (sampleValue.Contains(","))
+                                    {
+                                        int parts = sampleValue.Split(',').Length;
+                                        if (parts == 2) return "Vector2";
+                                        if (parts == 3) return "Vector3";
+                                    }
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            Debug.LogWarning($"[WARNING] Failed to determine type of column '{columnName}' in table '{tableName}'. Defaulting to TEXT.");
+                        }
                     }
+
+                    return colType; // Return detected column type
                 }
             }
         }
-
-        return "TEXT"; // Default fallback type
     }
+    return "TEXT"; // Default to TEXT if not found
+}
 
 
     public void AddColumnToTable(string tableName, string columnName, string columnType)
@@ -157,71 +181,6 @@ public class Database
             //}
         }
     }
-
-    public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
-    {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
-        {
-            connection.Open();
-
-            List<string> columnNames = new List<string>();
-            List<string> columnDefinitions = new List<string>();
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
-            using (var reader = command.ExecuteReader())
-            {
-                while (reader.Read())
-                {
-                    string colName = reader.GetString(1);
-                    string colType = reader.GetString(2);
-
-                    if (colName == oldColumnName)
-                    {
-                        columnNames.Add(newColumnName);
-                        columnDefinitions.Add($"{newColumnName} {newColumnType}");
-                    }
-                    else
-                    {
-                        columnNames.Add(colName);
-                        columnDefinitions.Add($"{colName} {colType}");
-                    }
-                }
-            }
-
-            string tempTableName = tableName + "_temp";
-            string newTableDefinition = string.Join(", ", columnDefinitions);
-            string columnList = string.Join(", ", columnNames);
-
-            string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
-            string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
-            string dropQuery = $"DROP TABLE {tableName};";
-            string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
-            {
-                command.ExecuteNonQuery();
-            }
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
-            {
-                command.ExecuteNonQuery();
-            }
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
-            {
-                command.ExecuteNonQuery();
-            }
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
-            {
-                command.ExecuteNonQuery();
-            }
-
-            Debug.Log(
-                $"Column '{oldColumnName}' changed to '{newColumnName}' with type '{newColumnType}' in table '{tableName}'.");
-        }
-    }
-
 
     private string GetDefaultValueForType(string columnType)
     {
@@ -306,86 +265,148 @@ public class Database
         }
     }
 
-
-  public void RemoveColumnFromTable(string tableName, string columnName)
-{
-    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+    public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
     {
-        connection.Open();
-
-        List<string> columnNames = new List<string>();
-        List<string> columnDefinitions = new List<string>();
-        string primaryKeyColumn = null;
-
-        // **Get Existing Table Schema**
-        using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
-        using (var reader = command.ExecuteReader())
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
         {
-            while (reader.Read())
+            connection.Open();
+
+            List<string> columnNames = new List<string>();
+            List<string> columnDefinitions = new List<string>();
+
+            using (var command = new SqliteCommand($"PRAGMA table_info({tableName});", connection))
+            using (var reader = command.ExecuteReader())
             {
-                string colName = reader.GetString(1);
-                string colType = reader.GetString(2);
-                bool isPrimaryKey = reader.GetInt32(5) == 1; // Check if it's the primary key
-
-                if (colName == columnName) continue; // Skip the column being deleted
-
-                columnNames.Add(colName);
-                columnDefinitions.Add($"{colName} {colType}");
-
-                if (isPrimaryKey)
+                while (reader.Read())
                 {
-                    primaryKeyColumn = colName; // Store primary key column
+                    string colName = reader.GetString(1);
+                    string colType = reader.GetString(2);
+
+                    if (colName == oldColumnName)
+                    {
+                        columnNames.Add(newColumnName);
+                        columnDefinitions.Add($"{newColumnName} {newColumnType}");
+                    }
+                    else
+                    {
+                        columnNames.Add(colName);
+                        columnDefinitions.Add($"{colName} {colType}");
+                    }
                 }
             }
+
+            string tempTableName = tableName + "_temp";
+            string newTableDefinition = string.Join(", ", columnDefinitions);
+            string columnList = string.Join(", ", columnNames);
+
+            string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
+            string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
+            string dropQuery = $"DROP TABLE {tableName};";
+            string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+
+            using (var command = new SqliteCommand(createQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new SqliteCommand(copyDataQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new SqliteCommand(dropQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new SqliteCommand(renameQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            Debug.Log(
+                $"Column '{oldColumnName}' changed to '{newColumnName}' with type '{newColumnType}' in table '{tableName}'.");
         }
-
-        if (columnNames.Count == 0)
-        {
-            Debug.LogError("[ERROR] Cannot delete the only column in the table.");
-            return;
-        }
-
-        // **Rebuild Table Without Deleted Column**
-        string tempTableName = tableName + "_temp";
-        string newTableDefinition = string.Join(", ", columnDefinitions);
-
-        if (primaryKeyColumn != null)
-        {
-            newTableDefinition += $", PRIMARY KEY({primaryKeyColumn})"; // Preserve primary key
-        }
-
-        string columnList = string.Join(", ", columnNames);
-
-        string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
-        string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
-        string dropQuery = $"DROP TABLE {tableName};";
-        string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        Debug.Log($"Column '{columnName}' removed from '{tableName}', primary key preserved.");
-        
-        
     }
-}
+
+
+    public void RemoveColumnFromTable(string tableName, string columnName)
+    {
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            List<string> columnNames = new List<string>();
+            List<string> columnDefinitions = new List<string>();
+            string primaryKeyColumn = null;
+
+            // **Get Existing Table Schema**
+            using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    string colName = reader.GetString(1);
+                    string colType = reader.GetString(2);
+                    bool isPrimaryKey = reader.GetInt32(5) == 1; // Check if it's the primary key
+
+                    if (colName == columnName) continue; // Skip the column being deleted
+
+                    columnNames.Add(colName);
+                    columnDefinitions.Add($"{colName} {colType}");
+
+                    if (isPrimaryKey)
+                    {
+                        primaryKeyColumn = colName; // Store primary key column
+                    }
+                }
+            }
+
+            if (columnNames.Count == 0)
+            {
+                Debug.LogError("[ERROR] Cannot delete the only column in the table.");
+                return;
+            }
+
+            // **Rebuild Table Without Deleted Column**
+            string tempTableName = tableName + "_temp";
+            string newTableDefinition = string.Join(", ", columnDefinitions);
+
+            if (primaryKeyColumn != null)
+            {
+                newTableDefinition += $", PRIMARY KEY({primaryKeyColumn})"; // Preserve primary key
+            }
+
+            string columnList = string.Join(", ", columnNames);
+
+            string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
+            string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
+            string dropQuery = $"DROP TABLE {tableName};";
+            string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            Debug.Log($"Column '{columnName}' removed from '{tableName}', primary key preserved.");
+        }
+    }
 
 
     public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
@@ -733,7 +754,7 @@ public class Database
             using (var command = new SqliteCommand(query, connection))
             {
                 command.Parameters.AddWithValue("@keyValue", keyValue);
-                long count = (long)command.ExecuteScalar();
+                long count = (long) command.ExecuteScalar();
                 return count > 0;
             }
         }
@@ -763,16 +784,22 @@ public class Database
 
     public void AddColumn(string tableName, string columnName, string columnType)
     {
+        string sqlType = columnType;
+
+        if (columnType == "Vector2" || columnType == "Vector3")
+        {
+            sqlType = "TEXT"; // Stored as "x,y" or "x,y,z"
+        }
+
         using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
         {
             connection.Open();
 
-            string query = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType};";
+            string query = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {sqlType};";
             using (var command = new SqliteCommand(query, connection))
             {
                 command.ExecuteNonQuery();
             }
         }
     }
-
 }

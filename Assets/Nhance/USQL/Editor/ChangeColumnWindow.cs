@@ -1,22 +1,19 @@
 using UnityEditor;
 using UnityEngine;
-using System.Collections.Generic;
 
 public class ChangeColumnWindow : EditorWindow
 {
-    private static UnitySQLManager manager;
     private static Database database;
     private static string tableName;
     private static string columnName;
     private static string newColumnName;
     private static int selectedTypeIndex;
 
-    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite" };
+    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3" };
     private static string currentColumnType;
 
-    public static void ShowWindow(UnitySQLManager mgr, Database db, string tblName, string colName)
+    public static void ShowWindow(Database db, string tblName, string colName)
     {
-        manager = mgr;
         database = db;
         tableName = tblName;
         columnName = colName;
@@ -24,9 +21,10 @@ public class ChangeColumnWindow : EditorWindow
 
         currentColumnType = database.GetColumnType(tableName, columnName);
         selectedTypeIndex = System.Array.IndexOf(columnTypes, currentColumnType);
+        if (selectedTypeIndex == -1) selectedTypeIndex = 0; // Default to TEXT if unknown type
 
         ChangeColumnWindow window = GetWindow<ChangeColumnWindow>("Change Column");
-        window.minSize = new Vector2(300, 200);
+        window.position = new Rect(Screen.width / 2, Screen.height / 2, 300, 200);
         window.ShowModal();
     }
 

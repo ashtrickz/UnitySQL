@@ -1,9 +1,11 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Sql;
 using System.Linq;
+using Object = UnityEngine.Object;
 
 public partial class UnitySQLManager : EditorWindow
 {
@@ -413,6 +415,14 @@ public partial class UnitySQLManager : EditorWindow
                         }
                     }
                     // **Standard Label for Text/Numeric Values**
+                    else if (columnType == "Vector2" && value is Vector2 vector2)
+                    {
+                        GUI.Label(cellRect, $"Vector2({vector2.x}, {vector2.y})", EditorStyles.label);
+                    }
+                    else if (columnType == "Vector3" && value is Vector3 vector3)
+                    {
+                        GUI.Label(cellRect, $"Vector3({vector3.x}, {vector3.y}, {vector3.z})", EditorStyles.label);
+                    }
                     else
                     {
                         string cellValue = value?.ToString() ?? ""; // Remove "NULL" label
@@ -570,8 +580,7 @@ public partial class UnitySQLManager : EditorWindow
         CreateDatabaseWindow.ShowWindow(this, connection);
     }
 
-    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
-        object newValue)
+    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, object newValue)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
@@ -579,30 +588,50 @@ public partial class UnitySQLManager : EditorWindow
         {
             string convertedValue = "";
 
-            // **Fetch Column Type**
             string columnType = database.GetColumnType(tableName, columnName);
 
-            if (newValue == null)
+            try
             {
-                convertedValue = "NULL"; // Store as NULL in the database
-            }
-            else if (columnType == "Sprite" && newValue is Sprite sprite)
-            {
-                convertedValue = AssetDatabase.GetAssetPath(sprite); // Store Sprite Asset Path
-            }
-            else if (columnType == "GameObject" && newValue is GameObject gameObject)
-            {
-                convertedValue = AssetDatabase.GetAssetPath(gameObject); // Store GameObject Prefab Path
-            }
-            else
-            {
-                convertedValue = newValue.ToString();
-            }
+                if (newValue == null)
+                {
+                    convertedValue = "NULL"; // Store as NULL in the database
+                }
+                else if (columnType == "GameObject" && newValue is GameObject gameObject)
+                {
+                    convertedValue = AssetDatabase.GetAssetPath(gameObject); // Store asset path
+                }
+                else if (columnType == "Sprite" && newValue is Sprite sprite)
+                {
+                    convertedValue = AssetDatabase.GetAssetPath(sprite); // Store asset path
+                }
+                else if (columnType == "Vector2" && newValue is Vector2 vector2)
+                {
+                    convertedValue = $"{vector2.x},{vector2.y}"; // Store as "x,y"
+                }
+                else if (columnType == "Vector3" && newValue is Vector3 vector3)
+                {
+                    convertedValue = $"{vector3.x},{vector3.y},{vector3.z}"; // Store as "x,y,z"
+                }
+                else
+                {
+                    convertedValue = newValue.ToString();
+                }
 
-            database.UpdateCellValue(tableName, rowData, columnName, convertedValue);
-            database.LoadTableContent(tableName);
+                if (rowData.ContainsKey(columnName))
+                {
+                    rowData[columnName] = newValue;
+                }
+
+                database.UpdateCellValue(tableName, rowData, columnName, convertedValue);
+                database.LoadTableContent(tableName);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[ERROR] Failed to update cell '{columnName}' in table '{tableName}': {e.Message}");
+            }
         }
     }
+
 
 
     private void CopyCellToClipboard(string cellValue)
@@ -654,9 +683,14 @@ public partial class UnitySQLManager : EditorWindow
 
     private void OpenChangeColumnWindow(string tableName, string columnName)
     {
-        ChangeColumnWindow.ShowWindow(this,
-            connections[selectedConnectionIndex].Databases[selectedDatabaseIndex], tableName, columnName);
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+        if (database != null)
+        {
+            ChangeColumnWindow.ShowWindow(database, tableName, columnName);
+        }
     }
+
 
 
     private void OpenDeleteColumnWindow(string tableName, string columnName)

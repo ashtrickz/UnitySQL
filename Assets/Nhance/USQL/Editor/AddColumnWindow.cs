@@ -8,7 +8,7 @@ public class AddColumnWindow : EditorWindow
     private static string columnName = "";
     private static int selectedTypeIndex = 0;
     
-    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite" };
+    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3" };
 
     public static void ShowWindow(UnitySQLManager mgr, string tblName)
     {
