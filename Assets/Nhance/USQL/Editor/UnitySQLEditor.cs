@@ -7,7 +7,7 @@ using System.Data.Sql;
 using System.Linq;
 using Object = UnityEngine.Object;
 
-public partial class UnitySQLManager : EditorWindow
+public class UnitySQLManager : EditorWindow
 {
     private List<DatabaseConnection> connections = new List<DatabaseConnection>();
     private int selectedConnectionIndex = -1;
@@ -525,13 +525,6 @@ public partial class UnitySQLManager : EditorWindow
         Debug.Log($"[INFO] Database '{database.Name}' removed.");
     }
 
-    public void RemoveTable(Database database, string tableName)
-    {
-        database.RemoveTable(tableName);
-        SaveSessionData();
-        Debug.Log($"[INFO] Table '{tableName}' removed.");
-    }
-
     private void OpenDeleteConnectionWindow(DatabaseConnection connection)
     {
         ConfirmationWindow.ShowWindow(
@@ -555,11 +548,10 @@ public partial class UnitySQLManager : EditorWindow
         ConfirmationWindow.ShowWindow(
             "Delete Table",
             $"Are you sure you want to delete table '{tableName}'?",
-            () => RemoveTable(database, tableName)
+            () => database.DeleteTable(tableName)
         );
     }
-
-
+    
     private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
         string cellValue)
     {

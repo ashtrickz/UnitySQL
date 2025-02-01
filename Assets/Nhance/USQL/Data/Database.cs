@@ -476,77 +476,25 @@ public class Database
         }
     }
 
-
-    public void RenameColumnInTable(string tableName, string oldColumnName, string newColumnName)
+    public void DeleteTable(string tableName)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
         {
             connection.Open();
 
-            // Get table structure
-            using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
-            using (var reader = command.ExecuteReader())
+            string query = $"DROP TABLE IF EXISTS {tableName};";
+            using (var command = new SqliteCommand(query, connection))
             {
-                List<string> columns = new List<string>();
-                List<string> newColumns = new List<string>();
-
-                while (reader.Read())
-                {
-                    string colName = reader.GetString(1);
-                    string colType = reader.GetString(2);
-
-                    if (colName == oldColumnName)
-                    {
-                        newColumns.Add($"{newColumnName} {colType}"); // Use new column name
-                        columns.Add(colName); // Keep old name for data transfer
-                    }
-                    else
-                    {
-                        newColumns.Add($"{colName} {colType}");
-                        columns.Add(colName);
-                    }
-                }
-
-                if (!columns.Contains(oldColumnName))
-                {
-                    Debug.LogError($"Column {oldColumnName} does not exist in table {tableName}.");
-                    return;
-                }
-
-                string tempTableName = tableName + "_temp";
-                string newTableDefinition = string.Join(", ", newColumns);
-                string columnsList = string.Join(", ", columns);
-
-                // Create new table
-                string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
-                string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnsList} FROM {tableName};";
-                string dropQuery = $"DROP TABLE {tableName};";
-                string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
-
-                using (var createCommand = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
-                {
-                    createCommand.ExecuteNonQuery();
-                }
-
-                using (var copyCommand = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
-                {
-                    copyCommand.ExecuteNonQuery();
-                }
-
-                using (var dropCommand = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
-                {
-                    dropCommand.ExecuteNonQuery();
-                }
-
-                using (var renameCommand = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
-                {
-                    renameCommand.ExecuteNonQuery();
-                }
-
-                Debug.Log($"Column {oldColumnName} renamed to {newColumnName} in table {tableName}");
+                command.ExecuteNonQuery();
             }
+
+            Debug.Log($"[INFO] Table '{tableName}' deleted.");
         }
+
+        // **Remove from local list and refresh UI**
+        Tables.RemoveAll(t => t.Name == tableName);
     }
+    
 
     public string GetPrimaryKeyColumn(string tableName)
     {
