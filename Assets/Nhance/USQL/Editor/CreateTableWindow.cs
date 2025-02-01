@@ -6,134 +6,89 @@ public class CreateTableWindow : EditorWindow
 {
     private static Database database;
     private static string tableName = "";
-    private static List<string> columnNames = new List<string>() { "id" };
-    private static List<string> columnTypes = new List<string>() { "INTEGER" };
-    private static List<bool> isPrimaryKey = new List<bool>() { true }; // Default first column as primary key
-    private static readonly string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB" };
+    private static List<Database.ColumnDefinition> columns = new List<Database.ColumnDefinition>();
+
+    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3" };
+    private static int primaryKeyIndex = -1; // Index of the selected primary key column
 
     public static void ShowWindow(Database db)
     {
         database = db;
         tableName = "";
-        columnNames = new List<string>() { "id" };
-        columnTypes = new List<string>() { "INTEGER" };
-        isPrimaryKey = new List<bool>() { true };
+        columns.Clear();
+        primaryKeyIndex = -1;
 
-        CreateTableWindow window = GetWindow<CreateTableWindow>("Create New Table", true);
-        window.minSize = new Vector2(450, 350);
+        CreateTableWindow window = GetWindow<CreateTableWindow>("Create Table");
+        window.position = new Rect(Screen.width / 2, Screen.height / 2, 400, 350);
         window.ShowModal();
     }
 
     private void OnGUI()
     {
-        EditorGUILayout.BeginVertical("box");
-        EditorGUILayout.LabelField($"Create a New Table in {database.Name}", EditorStyles.boldLabel);
-
+        EditorGUILayout.LabelField("Create New Table", EditorStyles.boldLabel);
         tableName = EditorGUILayout.TextField("Table Name:", tableName);
 
-        EditorGUILayout.Space(10);
+        EditorGUILayout.Space();
         EditorGUILayout.LabelField("Columns:", EditorStyles.boldLabel);
 
-        if (columnNames == null || columnTypes == null || isPrimaryKey == null)
-        {
-            columnNames = new List<string> { "id" };
-            columnTypes = new List<string> { "INTEGER" };
-            isPrimaryKey = new List<bool> { true };
-        }
-
-        for (int i = 0; i < columnNames.Count; i++)
+        // **Draw column list**
+        for (int i = 0; i < columns.Count; i++)
         {
             EditorGUILayout.BeginHorizontal();
 
-            if (i >= columnNames.Count || i >= columnTypes.Count || i >= isPrimaryKey.Count)
-            {
-                Debug.LogError("[ERROR] Column list index out of bounds.");
-                break;
-            }
+            columns[i].Name = EditorGUILayout.TextField(columns[i].Name, GUILayout.Width(150));
+            columns[i].Type = columnTypes[EditorGUILayout.Popup(System.Array.IndexOf(columnTypes, columns[i].Type), columnTypes, GUILayout.Width(100))];
 
-            columnNames[i] = EditorGUILayout.TextField(columnNames[i], GUILayout.Width(200));
-            columnTypes[i] = availableColumnTypes[
-                EditorGUILayout.Popup(
-                    Mathf.Clamp(System.Array.IndexOf(availableColumnTypes, columnTypes[i]), 0,
-                        availableColumnTypes.Length - 1),
-                    availableColumnTypes, GUILayout.Width(150)
-                )
-            ];
-
+            // **Primary Key Checkbox**
             EditorGUILayout.LabelField("Is Primary Key: ", GUILayout.Width(90));
-            bool currentPrimaryKey = EditorGUILayout.Toggle(isPrimaryKey[i], GUILayout.Width(20));
+            bool isPrimaryKey = (primaryKeyIndex == i);
+            bool newPrimaryKey = EditorGUILayout.Toggle(isPrimaryKey, GUILayout.Width(20));
 
-            if (currentPrimaryKey && !isPrimaryKey[i]) // If the checkbox was just selected
+            if (newPrimaryKey && !isPrimaryKey)
             {
-                for (int j = 0; j < isPrimaryKey.Count; j++)
-                {
-                    isPrimaryKey[j] = (j == i); // Only one can be true
-                }
+                primaryKeyIndex = i; // Only one primary key allowed
+            }
+            else if (!newPrimaryKey && isPrimaryKey)
+            {
+                primaryKeyIndex = -1; // Remove primary key selection
             }
 
-            isPrimaryKey[i] = currentPrimaryKey;
-
-            if (GUILayout.Button("x", GUILayout.Width(25)) && columnNames.Count > 1)
+            if (GUILayout.Button("x", GUILayout.Width(25)))
             {
-                columnNames.RemoveAt(i);
-                columnTypes.RemoveAt(i);
-                isPrimaryKey.RemoveAt(i);
-
-                if (!isPrimaryKey.Contains(true) && columnNames.Count > 0) // Ensure at least one primary key
-                {
-                    isPrimaryKey[0] = true;
-                }
-
+                if (primaryKeyIndex == i) primaryKeyIndex = -1; // Reset primary key if deleted
+                columns.RemoveAt(i);
                 break;
             }
 
             EditorGUILayout.EndHorizontal();
         }
 
-        if (GUILayout.Button("+", GUILayout.Width(25)))
+        if (GUILayout.Button("+", GUILayout.Width(30), GUILayout.Height(25))) // **Modified Add Column Button**
         {
-            columnNames.Add("new_column");
-            columnTypes.Add("TEXT");
-            isPrimaryKey.Add(false);
+            columns.Add(new Database.ColumnDefinition { Name = "", Type = "TEXT" });
         }
 
-        EditorGUILayout.Space(15);
-
+        EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("Create Table", GUILayout.Width(150)))
+
+        if (GUILayout.Button("Create Table", GUILayout.Height(25)))
         {
-            CreateTable();
+            if (!string.IsNullOrEmpty(tableName) && columns.Count > 0)
+            {
+                database.CreateTable(tableName, columns, primaryKeyIndex);
+                Close();
+            }
+            else
+            {
+                Debug.LogError("[ERROR] Table name and at least one column are required.");
+            }
         }
 
-        if (GUILayout.Button("Cancel", GUILayout.Width(150)))
+        if (GUILayout.Button("Cancel", GUILayout.Height(25)))
         {
             Close();
         }
 
         EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void CreateTable()
-    {
-        if (string.IsNullOrEmpty(tableName))
-        {
-            Debug.LogError("[ERROR] Table name cannot be empty.");
-            return;
-        }
-
-        int primaryKeyIndex = isPrimaryKey.IndexOf(true);
-        if (primaryKeyIndex == -1)
-        {
-            Debug.LogError("[ERROR] No primary key selected. Please choose a primary key column.");
-            return;
-        }
-
-        // Ensure the primary key column has "PRIMARY KEY" in its type
-        columnTypes[primaryKeyIndex] += " PRIMARY KEY";
-
-        database.CreateTable(tableName, columnNames, columnTypes);
-        Close();
     }
 }

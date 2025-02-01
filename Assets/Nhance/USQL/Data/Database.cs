@@ -41,29 +41,66 @@ public class Database
         // Logic for adding a new table
     }
 
-    public void CreateTable(string tableName, List<string> columnNames, List<string> columnTypes)
+    public void CreateTable(string tableName, List<ColumnDefinition> columns, int primaryKeyIndex)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
         {
             connection.Open();
 
-            List<string> columns = new List<string>();
-            for (int i = 0; i < columnNames.Count; i++)
+            List<string> columnDefinitions = new List<string>();
+
+            for (int i = 0; i < columns.Count; i++)
             {
-                string type = columnTypes[i];
-                if (type == "Vector2" || type == "Vector3" || type == "GameObject") type = "TEXT";
-                if (type == "Sprite") type = "BLOB";
-                columns.Add($"{columnNames[i]} {type}");
+                string columnType = columns[i].Type;
+
+                // **Store Vector2, Vector3, GameObject, and Sprite as TEXT**
+                if (columnType == "Vector2" || columnType == "Vector3" || columnType == "GameObject" || columnType == "Sprite")
+                {
+                    columnType = "TEXT";
+                }
+
+                if (i == primaryKeyIndex)
+                {
+                    columnDefinitions.Add($"{columns[i].Name} {columnType} PRIMARY KEY");
+                }
+                else
+                {
+                    columnDefinitions.Add($"{columns[i].Name} {columnType}");
+                }
             }
 
-            string query = $"CREATE TABLE {tableName} ({string.Join(", ", columns)});";
-            using (var command = new Mono.Data.Sqlite.SqliteCommand(query, connection))
+            string query = $"CREATE TABLE {tableName} ({string.Join(", ", columnDefinitions)});";
+            using (var command = new SqliteCommand(query, connection))
             {
                 command.ExecuteNonQuery();
+            }
+
+            Debug.Log($"[INFO] Table '{tableName}' created successfully.");
+        }
+
+        LoadTables(); // Refresh table list
+    }
+
+    public void LoadTables()
+    {
+        Tables.Clear();
+
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            using (var command = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table';", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    Tables.Add(new Table(reader.GetString(0)));
+                }
             }
         }
     }
 
+    
     public void InsertIntoTable(string tableName, Dictionary<string, object> rowData)
     {
         var table = Tables.FirstOrDefault(t => t.Name == tableName);
@@ -750,4 +787,12 @@ public class Database
             }
         }
     }
+    
+    public class ColumnDefinition
+    {
+        public string Name;
+        public string Type;
+    }
+
+
 }
