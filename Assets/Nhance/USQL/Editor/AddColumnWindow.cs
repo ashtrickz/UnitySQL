@@ -3,63 +3,53 @@ using UnityEngine;
 
 public class AddColumnWindow : EditorWindow
 {
-    private static Database database;
+    private static UnitySQLManager manager;
     private static string tableName;
-    private static string newColumnName = "";
-    private static int selectedColumnTypeIndex = 0; // Default type is TEXT
-    private static readonly string[] availableColumnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "Vector2", "Vector3", "Sprite", "GameObject" };
+    private static string columnName = "";
+    private static int selectedTypeIndex = 0;
+    
+    private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite" };
 
-
-    public static void ShowWindow(Database db, string tblName)
+    public static void ShowWindow(UnitySQLManager mgr, string tblName)
     {
-        database = db;
+        manager = mgr;
         tableName = tblName;
-        newColumnName = "";
-        selectedColumnTypeIndex = 0;
 
-        AddColumnWindow window = GetWindow<AddColumnWindow>("Add Column", true);
-        window.minSize = new Vector2(300, 150);
+        AddColumnWindow window = GetWindow<AddColumnWindow>("Add Column");
+        window.position = new Rect(Screen.width / 2, Screen.height / 2, 300, 150);
         window.ShowModal();
     }
 
     private void OnGUI()
     {
-        EditorGUILayout.LabelField($"Add Column to {tableName}", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Add New Column", EditorStyles.boldLabel);
+        columnName = EditorGUILayout.TextField("Column Name:", columnName);
+        selectedTypeIndex = EditorGUILayout.Popup("Column Type:", selectedTypeIndex, columnTypes);
 
-        newColumnName = EditorGUILayout.TextField("Column Name:", newColumnName);
-
-        EditorGUILayout.Space(5);
-
-        // Column Type Dropdown
-        selectedColumnTypeIndex = EditorGUILayout.Popup("Column Type:", selectedColumnTypeIndex, availableColumnTypes);
-
-        EditorGUILayout.Space(10);
-
+        EditorGUILayout.Space();
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("Add Column", GUILayout.Width(120)))
+
+        if (GUILayout.Button("Add", GUILayout.Height(25)))
         {
-            AddColumn();
+            if (!string.IsNullOrEmpty(columnName))
+            {
+                string selectedType = columnTypes[selectedTypeIndex];
+
+                manager.AddColumnToTable(tableName, columnName, selectedType);
+                manager.SaveSessionData();
+                Close(); // Close the window after adding the column
+            }
+            else
+            {
+                Debug.LogError("[ERROR] Column name cannot be empty.");
+            }
         }
-        if (GUILayout.Button("Cancel", GUILayout.Width(120)))
+
+        if (GUILayout.Button("Cancel", GUILayout.Height(25)))
         {
             Close();
         }
+
         EditorGUILayout.EndHorizontal();
-    }
-
-    private void AddColumn()
-    {
-        if (string.IsNullOrEmpty(newColumnName))
-        {
-            Debug.LogError("[ERROR] Column name cannot be empty.");
-            return;
-        }
-
-        string selectedColumnType = availableColumnTypes[selectedColumnTypeIndex];
-        database.AddColumnToTable(tableName, newColumnName, selectedColumnType);
-        
-        database.LoadTableContent(tableName);
-        
-        Close();
     }
 }

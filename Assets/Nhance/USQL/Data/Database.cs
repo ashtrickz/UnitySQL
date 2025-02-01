@@ -722,4 +722,57 @@ public class Database
     {
         // Execute SQL Query logic
     }
+
+    public bool CheckPrimaryKeyExists(string tableName, string primaryKeyColumn, string keyValue)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            string query = $"SELECT COUNT(*) FROM {tableName} WHERE {primaryKeyColumn} = @keyValue;";
+            using (var command = new SqliteCommand(query, connection))
+            {
+                command.Parameters.AddWithValue("@keyValue", keyValue);
+                long count = (long)command.ExecuteScalar();
+                return count > 0;
+            }
+        }
+    }
+
+    public void InsertRow(string tableName, Dictionary<string, object> rowData)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            string columnNames = string.Join(", ", rowData.Keys);
+            string placeholders = string.Join(", ", rowData.Keys.Select(k => $"@{k}"));
+
+            string query = $"INSERT INTO {tableName} ({columnNames}) VALUES ({placeholders});";
+            using (var command = new SqliteCommand(query, connection))
+            {
+                foreach (var kvp in rowData)
+                {
+                    command.Parameters.AddWithValue($"@{kvp.Key}", kvp.Value ?? DBNull.Value);
+                }
+
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
+    public void AddColumn(string tableName, string columnName, string columnType)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+
+            string query = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType};";
+            using (var command = new SqliteCommand(query, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
 }

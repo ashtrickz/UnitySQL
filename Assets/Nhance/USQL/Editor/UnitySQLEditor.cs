@@ -441,10 +441,35 @@ public partial class UnitySQLManager : EditorWindow
     private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
     {
         GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Duplicate Row"), false, () => DuplicateRow(tableName, rowData));
+        menu.AddItem(new GUIContent("Duplicate Row"), false, () => OpenDuplicateRowWindow(tableName, rowData));
         menu.AddItem(new GUIContent("Delete Row"), false, () => OpenDeleteRowWindow(tableName, rowData));
         menu.ShowAsContext();
     }
+
+    public void DuplicateRow(string tableName, Dictionary<string, object> newRowData)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+        if (database != null)
+        {
+            database.InsertRow(tableName, newRowData);
+            database.LoadTableContent(tableName);
+        }
+    }
+
+
+    private void OpenDuplicateRowWindow(string tableName, Dictionary<string, object> rowData)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+        if (database != null)
+        {
+            string primaryKeyColumn = database.GetPrimaryKeyColumn(tableName);
+            DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
+        }
+    }
+
+
 
     private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
         string cellValue)
@@ -587,14 +612,6 @@ public partial class UnitySQLManager : EditorWindow
         Debug.Log($"[INFO] Copied value: {cellValue}");
     }
 
-
-    private void DuplicateRow(string tableName, Dictionary<string, object> rowData)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        database.DuplicateRowInTable(tableName, rowData);
-        database.LoadTableContent(tableName);
-    }
-
     private void OpenDeleteRowWindow(string tableName, Dictionary<string, object> rowData)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -624,7 +641,7 @@ public partial class UnitySQLManager : EditorWindow
     private void OpenAddColumnWindow(string tableName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        AddColumnWindow.ShowWindow(database, tableName);
+        AddColumnWindow.ShowWindow(this, tableName);
     }
 
     private void ShowColumnContextMenu(string columnName, string tableName)
@@ -736,4 +753,27 @@ public partial class UnitySQLManager : EditorWindow
         public List<KeyValuePairStringString>
             OpenedTables = new List<KeyValuePairStringString>(); // Stores last selected table per connection
     }
+
+    public bool DoesPrimaryKeyExist(string tableName, string primaryKeyColumn, string keyValue)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+        if (database != null)
+        {
+            return database.CheckPrimaryKeyExists(tableName, primaryKeyColumn, keyValue);
+        }
+        return false;
+    }
+
+    public void AddColumnToTable(string tableName, string columnName, string columnType)
+    {
+        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+        if (database != null)
+        {
+            database.AddColumn(tableName, columnName, columnType);
+            database.LoadTableContent(tableName);
+        }
+    }
+
 }
