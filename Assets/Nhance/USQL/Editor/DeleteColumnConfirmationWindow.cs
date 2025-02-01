@@ -44,6 +44,7 @@ public class DeleteColumnConfirmationWindow : EditorWindow
         {
             database.RemoveColumnFromTable(tableName, columnName);
             Debug.Log($"[SUCCESS] Deleted column: {columnName} from table: {tableName}");
+            database.LoadTableContent(tableName);
         }
         else
         {

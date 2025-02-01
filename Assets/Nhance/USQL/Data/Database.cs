@@ -307,68 +307,85 @@ public class Database
     }
 
 
-    public void RemoveColumnFromTable(string tableName, string columnName)
+  public void RemoveColumnFromTable(string tableName, string columnName)
+{
+    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        connection.Open();
+
+        List<string> columnNames = new List<string>();
+        List<string> columnDefinitions = new List<string>();
+        string primaryKeyColumn = null;
+
+        // **Get Existing Table Schema**
+        using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
+        using (var reader = command.ExecuteReader())
         {
-            connection.Open();
-
-            string tempTableName = tableName + "_temp";
-
-            // Get all columns except the one to be removed
-            List<string> columns = new List<string>();
-
-            using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
-            using (var reader = command.ExecuteReader())
+            while (reader.Read())
             {
-                while (reader.Read())
+                string colName = reader.GetString(1);
+                string colType = reader.GetString(2);
+                bool isPrimaryKey = reader.GetInt32(5) == 1; // Check if it's the primary key
+
+                if (colName == columnName) continue; // Skip the column being deleted
+
+                columnNames.Add(colName);
+                columnDefinitions.Add($"{colName} {colType}");
+
+                if (isPrimaryKey)
                 {
-                    string colName = reader.GetString(1);
-                    if (colName != columnName) // Exclude column to be removed
-                    {
-                        columns.Add(colName);
-                    }
+                    primaryKeyColumn = colName; // Store primary key column
                 }
             }
-
-            if (columns.Count == 0)
-            {
-                Debug.LogError($"[ERROR] Cannot remove all columns from {tableName}.");
-                return;
-            }
-
-            string columnsList = string.Join(", ", columns);
-
-            // Ensure the temp table does not already exist
-            using (var checkCommand =
-                   new Mono.Data.Sqlite.SqliteCommand($"DROP TABLE IF EXISTS {tempTableName};", connection))
-            {
-                checkCommand.ExecuteNonQuery();
-            }
-
-            // Create new table without the unwanted column
-            string createQuery = $"CREATE TABLE {tempTableName} AS SELECT {columnsList} FROM {tableName};";
-            using (var createCommand = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
-            {
-                createCommand.ExecuteNonQuery();
-            }
-
-            // Drop the old table and rename the new one
-            using (var dropCommand = new Mono.Data.Sqlite.SqliteCommand($"DROP TABLE {tableName};", connection))
-            {
-                dropCommand.ExecuteNonQuery();
-            }
-
-            using (var renameCommand =
-                   new Mono.Data.Sqlite.SqliteCommand($"ALTER TABLE {tempTableName} RENAME TO {tableName};",
-                       connection))
-            {
-                renameCommand.ExecuteNonQuery();
-            }
-
-            Debug.Log($"[SUCCESS] Column '{columnName}' removed from '{tableName}'.");
         }
+
+        if (columnNames.Count == 0)
+        {
+            Debug.LogError("[ERROR] Cannot delete the only column in the table.");
+            return;
+        }
+
+        // **Rebuild Table Without Deleted Column**
+        string tempTableName = tableName + "_temp";
+        string newTableDefinition = string.Join(", ", columnDefinitions);
+
+        if (primaryKeyColumn != null)
+        {
+            newTableDefinition += $", PRIMARY KEY({primaryKeyColumn})"; // Preserve primary key
+        }
+
+        string columnList = string.Join(", ", columnNames);
+
+        string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
+        string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
+        string dropQuery = $"DROP TABLE {tableName};";
+        string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        Debug.Log($"Column '{columnName}' removed from '{tableName}', primary key preserved.");
+        
+        
     }
+}
 
 
     public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
