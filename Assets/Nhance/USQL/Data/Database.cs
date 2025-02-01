@@ -100,25 +100,141 @@ public class Database
         }
     }
 
+    public string GetColumnType(string tableName, string columnName)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
 
+            using (var command = new SqliteCommand($"PRAGMA table_info({tableName});", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    string colName = reader.GetString(1); // Column name
+                    string colType = reader.GetString(2); // Column type
+
+                    if (colName == columnName)
+                    {
+                        return colType; // Return the actual SQLite column type
+                    }
+                }
+            }
+        }
+
+        return "TEXT"; // Default fallback type
+    }
+
+    
     public void AddColumnToTable(string tableName, string columnName, string columnType)
     {
         using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
         {
             connection.Open();
 
+            // **1. Add Column to Table**
             string query = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnType};";
-
             using (var command = new Mono.Data.Sqlite.SqliteCommand(query, connection))
             {
                 command.ExecuteNonQuery();
             }
 
             Debug.Log($"[SUCCESS] Column '{columnName}' ({columnType}) added to {tableName}");
+
+            // **2. Populate Existing Rows with Default Values**
+            string defaultValue = columnType.Contains("GameObject") || columnType.Contains("Sprite") ? null : GetDefaultValueForType(columnType);
+            //if (defaultValue != null) // Only execute if default value is needed
+            //{
+                string updateQuery = $"UPDATE {tableName} SET {columnName} = {defaultValue};";
+                using (var updateCommand = new Mono.Data.Sqlite.SqliteCommand(updateQuery, connection))
+                {
+                    updateCommand.ExecuteNonQuery();
+                }
+                Debug.Log($"[SUCCESS] Default value '{defaultValue}' set for all rows in column '{columnName}'");
+            //}
         }
     }
+public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
+{
+    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+    {
+        connection.Open();
+
+        List<string> columnNames = new List<string>();
+        List<string> columnDefinitions = new List<string>();
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                string colName = reader.GetString(1);
+                string colType = reader.GetString(2);
+
+                if (colName == oldColumnName)
+                {
+                    columnNames.Add(newColumnName);
+                    columnDefinitions.Add($"{newColumnName} {newColumnType}");
+                }
+                else
+                {
+                    columnNames.Add(colName);
+                    columnDefinitions.Add($"{colName} {colType}");
+                }
+            }
+        }
+
+        string tempTableName = tableName + "_temp";
+        string newTableDefinition = string.Join(", ", columnDefinitions);
+        string columnList = string.Join(", ", columnNames);
+
+        string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
+        string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
+        string dropQuery = $"DROP TABLE {tableName};";
+        string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
+        {
+            command.ExecuteNonQuery();
+        }
+
+        Debug.Log($"Column '{oldColumnName}' changed to '{newColumnName}' with type '{newColumnType}' in table '{tableName}'.");
+    }
+}
 
 
+    private string GetDefaultValueForType(string columnType)
+    {
+        if (columnType.Contains("TEXT")) return "''"; // Empty string for text columns
+        if (columnType.Contains("INTEGER")) return "0"; // Default integer
+        if (columnType.Contains("REAL")) return "0.0"; // Default float
+        if (columnType.Contains("BLOB")) return "NULL"; // Null for binary objects (like textures)
+
+        // **Ensure `GameObject` and `Sprite` are NULL**
+        if (columnType.Contains("GameObject") || columnType.Contains("Sprite"))
+        {
+            return null; // GameObject & Sprite should be NULL
+        }
+
+        return null; // No default needed
+    }
+
+    
     public List<string> GetColumnNames(string tableName)
     {
         List<string> columns = new List<string>();
@@ -145,7 +261,7 @@ public class Database
         var table = Tables.FirstOrDefault(t => t.Name == tableName);
         if (table != null)
         {
-            table.LoadContent(Path);
+            table.LoadContent(this);
         }
     }
 

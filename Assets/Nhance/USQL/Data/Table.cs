@@ -15,11 +15,11 @@ public class Table
         Name = name;
     }
 
-    public void LoadContent(string databasePath)
+    public void LoadContent(Database database)
     {
         Data.Clear();
 
-        using (var connection = new SqliteConnection($"Data Source={databasePath};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
         {
             connection.Open();
 
@@ -35,19 +35,14 @@ public class Table
                         string columnName = reader.GetName(i);
                         object value = reader.GetValue(i);
 
-                        if (value is string strValue && string.IsNullOrEmpty(strValue))
+                        // **Convert NULLs to Proper C# Values**
+                        if (value is DBNull) value = null;
+
+                        string columnType = database.GetColumnType(Name, columnName);
+
+                        if (columnType == "GameObject" || columnType == "Sprite")
                         {
-                            row[columnName] = null; // Convert empty strings to null
-                        }
-                        else if (columnName.Contains("GameObject"))
-                        {
-                            string prefabPath = value.ToString();
-                            row[columnName] = string.IsNullOrEmpty(prefabPath) ? null : AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-                        }
-                        else if (columnName.Contains("Sprite"))
-                        {
-                            string spritePath = value.ToString();
-                            row[columnName] = string.IsNullOrEmpty(spritePath) ? null : AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+                            row[columnName] = value == null || string.IsNullOrEmpty(value.ToString()) ? null : AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(value.ToString());
                         }
                         else
                         {
@@ -67,7 +62,7 @@ public class Table
         using (var connection = new SqliteConnection($"Data Source={databasePath};Version=3;"))
         {
             connection.Open();
-            
+
             string columns = string.Join(", ", rowData.Keys);
             string values = string.Join(", ", rowData.Keys.Select(k => "@" + k));
 
@@ -79,6 +74,7 @@ public class Table
                 {
                     command.Parameters.AddWithValue("@" + pair.Key, pair.Value);
                 }
+
                 command.ExecuteNonQuery();
             }
         }

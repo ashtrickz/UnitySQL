@@ -37,23 +37,18 @@ public partial class UnitySQLManager : EditorWindow
     private void SaveSessionData()
     {
         SaveData saveData = new SaveData();
-        if (EditorPrefs.HasKey(SaveKey))
-        {
-            string existingJson = EditorPrefs.GetString(SaveKey);
-            saveData = JsonUtility.FromJson<SaveData>(existingJson);
-        }
 
         // Store connection paths
         saveData.Connections = connections.Select(conn => conn.Path).ToList();
 
-        // Convert ExpandedConnections dictionary to list
+        // Store expanded states for connections
         saveData.ExpandedConnections = new List<KeyValuePairStringBool>();
         foreach (var pair in connectionStates)
         {
             saveData.ExpandedConnections.Add(new KeyValuePairStringBool { Key = pair.Key.Path, Value = pair.Value });
         }
 
-        // Convert ExpandedDatabases dictionary to list
+        // Store expanded states for databases
         saveData.ExpandedDatabases = new List<KeyValuePairStringList>();
         foreach (var connection in connections)
         {
@@ -69,7 +64,7 @@ public partial class UnitySQLManager : EditorWindow
             }
         }
 
-        // Convert OpenedTables dictionary to list
+        // Store opened tables
         saveData.OpenedTables = new List<KeyValuePairStringString>();
         foreach (var connection in connections)
         {
@@ -86,13 +81,12 @@ public partial class UnitySQLManager : EditorWindow
             }
         }
 
-        // Convert to JSON and save
+        // Convert to JSON and save in EditorPrefs
         string json = JsonUtility.ToJson(saveData, true);
         EditorPrefs.SetString(SaveKey, json);
 
         Debug.Log($"[DEBUG] Successfully Saved JSON:\n{json}");
     }
-
 
     private void LoadSessionData()
     {
@@ -110,7 +104,7 @@ public partial class UnitySQLManager : EditorWindow
             }
         }
 
-        // Convert ExpandedConnections list back into dictionary
+        // Restore expanded connections
         connectionStates.Clear();
         foreach (var pair in saveData.ExpandedConnections)
         {
@@ -121,7 +115,7 @@ public partial class UnitySQLManager : EditorWindow
             }
         }
 
-        // Convert ExpandedDatabases list back into dictionary
+        // Restore expanded databases
         databaseStates.Clear();
         foreach (var pair in saveData.ExpandedDatabases)
         {
@@ -138,7 +132,7 @@ public partial class UnitySQLManager : EditorWindow
             }
         }
 
-        // Convert OpenedTables list back into dictionary and restore selected table
+        // Restore opened tables
         if (saveData.OpenedTables.Count > 0)
         {
             foreach (var pair in saveData.OpenedTables)
@@ -179,115 +173,116 @@ public partial class UnitySQLManager : EditorWindow
     private Dictionary<DatabaseConnection, bool> connectionStates = new Dictionary<DatabaseConnection, bool>();
     private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
 
-    private void DrawConnectionsPanel()
+   private void DrawConnectionsPanel()
+{
+    EditorGUILayout.BeginVertical(GUILayout.Width(200));
+    EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+
+    GUIStyle containerStyle = new GUIStyle("box")
     {
-        EditorGUILayout.BeginVertical(GUILayout.Width(200));
-        EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+        padding = new RectOffset(5, 5, 5, 5),
+        margin = new RectOffset(5, 5, 5, 5)
+    };
 
-        GUIStyle containerStyle = new GUIStyle("box")
+    for (int i = 0; i < connections.Count; i++)
+    {
+        var connection = connections[i];
+
+        if (!connectionStates.ContainsKey(connection))
         {
-            padding = new RectOffset(5, 5, 5, 5),
-            margin = new RectOffset(5, 5, 5, 5)
-        };
+            connectionStates[connection] = false;
+        }
 
-        for (int i = 0; i < connections.Count; i++)
+        EditorGUILayout.BeginVertical(containerStyle);
+
+        bool isConnectionExpanded = connectionStates[connection];
+        string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+
+        if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
         {
-            var connection = connections[i];
+            connectionStates[connection] = !isConnectionExpanded;
+            SaveSessionData(); // Save expanded state
+        }
 
-            if (!connectionStates.ContainsKey(connection))
+        if (isConnectionExpanded)
+        {
+            foreach (var database in connection.Databases)
             {
-                connectionStates[connection] = false;
-            }
-
-            EditorGUILayout.BeginVertical(containerStyle);
-
-            bool isConnectionExpanded = connectionStates[connection];
-            string connectionArrow = isConnectionExpanded ? "▼" : "▶";
-
-            if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
-            {
-                connectionStates[connection] = !isConnectionExpanded;
-                SaveSessionData();
-            }
-
-            if (isConnectionExpanded)
-            {
-                foreach (var database in connection.Databases)
+                if (!databaseStates.ContainsKey(database))
                 {
-                    if (!databaseStates.ContainsKey(database))
-                    {
-                        databaseStates[database] = false;
-                    }
-
-                    bool isDatabaseExpanded = databaseStates[database];
-                    string databaseArrow = isDatabaseExpanded ? "▼" : "▶";
-
-                    EditorGUILayout.BeginVertical(containerStyle);
-                    EditorGUILayout.BeginHorizontal();
-                    GUILayout.Space(15);
-
-                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel,
-                            GUILayout.ExpandWidth(true)))
-                    {
-                        databaseStates[database] = !isDatabaseExpanded;
-                        selectedDatabaseIndex = connection.Databases.IndexOf(database);
-                        selectedConnectionIndex = i;
-                        SaveSessionData();
-                    }
-
-                    // "Refresh Tables" button (Left-Aligned)
-                    if (GUILayout.Button("⟳", GUILayout.Width(25)))
-                    {
-                        database.RefreshTables();
-                    }
-
-                    // "+" Button for adding a new table (Right-Aligned)
-                    if (GUILayout.Button("+", GUILayout.Width(25)))
-                    {
-                        OpenCreateTableWindow(database);
-                    }
-
-                    EditorGUILayout.EndHorizontal();
-
-                    if (isDatabaseExpanded)
-                    {
-                        foreach (var table in database.Tables)
-                        {
-                            EditorGUILayout.BeginHorizontal();
-                            GUILayout.Space(30);
-
-                            if (GUILayout.Button($" -\t {table.Name}", EditorStyles.boldLabel))
-                            {
-                                selectedTableForContent = table.Name;
-                                database.LoadTableContent(selectedTableForContent);
-                                SaveSessionData();
-                            }
-
-                            if (GUILayout.Button("⟳", GUILayout.Width(25)))
-                            {
-                                database.LoadTableContent(table.Name);
-                            }
-
-                            EditorGUILayout.EndHorizontal();
-                        }
-                    }
-
-                    EditorGUILayout.EndVertical();
+                    databaseStates[database] = false;
                 }
+
+                bool isDatabaseExpanded = databaseStates[database];
+                string databaseArrow = isDatabaseExpanded ? "▼" : "▶";
+
+                EditorGUILayout.BeginVertical(containerStyle);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Space(15);
+
+                if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel,
+                        GUILayout.ExpandWidth(true)))
+                {
+                    databaseStates[database] = !isDatabaseExpanded;
+                    selectedDatabaseIndex = connection.Databases.IndexOf(database);
+                    selectedConnectionIndex = i;
+                    SaveSessionData();
+                }
+
+                // Refresh Tables Button
+                if (GUILayout.Button("⟳", GUILayout.Width(25)))
+                {
+                    database.RefreshTables();
+                }
+
+                // "+" Button for adding a new table
+                if (GUILayout.Button("+", GUILayout.Width(25)))
+                {
+                    OpenCreateTableWindow(database);
+                }
+
+                EditorGUILayout.EndHorizontal();
+
+                if (isDatabaseExpanded)
+                {
+                    foreach (var table in database.Tables)
+                    {
+                        EditorGUILayout.BeginHorizontal();
+                        GUILayout.Space(30);
+
+                        if (GUILayout.Button($" -\t {table.Name}", EditorStyles.boldLabel))
+                        {
+                            selectedTableForContent = table.Name;
+                            database.LoadTableContent(selectedTableForContent);
+                            SaveSessionData();
+                        }
+
+                        if (GUILayout.Button("⟳", GUILayout.Width(25)))
+                        {
+                            database.LoadTableContent(table.Name);
+                        }
+
+                        EditorGUILayout.EndHorizontal();
+                    }
+                }
+
+                EditorGUILayout.EndVertical();
             }
-
-            EditorGUILayout.EndVertical(); // Close connection container
         }
 
-        EditorGUILayout.Space();
-
-        if (GUILayout.Button("Add Connection"))
-        {
-            AddNewConnection();
-        }
-
-        EditorGUILayout.EndVertical();
+        EditorGUILayout.EndVertical(); // Close connection container
     }
+
+    EditorGUILayout.Space();
+
+    if (GUILayout.Button("Add Connection"))
+    {
+        AddNewConnection();
+    }
+
+    EditorGUILayout.EndVertical();
+}
+   
 
 
     private void DrawRightPanel()
@@ -333,92 +328,100 @@ public partial class UnitySQLManager : EditorWindow
     }
 
     private void DrawTableContentUI(Database database)
-{
-    if (string.IsNullOrEmpty(selectedTableForContent)) return;
-
-    var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
-    if (table == null) return;
-
-    string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
-    scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
-
-    if (table.Data.Count > 0)
     {
-        // **Column Headers with Right-Click Menu**
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-        foreach (var column in table.Data[0].Keys)
+        if (string.IsNullOrEmpty(selectedTableForContent)) return;
+
+        var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
+        if (table == null) return;
+
+        string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
+
+        if (table.Data.Count > 0)
         {
-            string displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
-            GUIStyle columnStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-
-            Rect headerRect = GUILayoutUtility.GetRect(120, 25);
-            GUI.Box(headerRect, displayColumn, columnStyle);
-
-            // **Right-Click Context Menu for Column Headers**
-            if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && headerRect.Contains(Event.current.mousePosition))
-            {
-                ShowColumnContextMenu(column, selectedTableForContent);
-                Event.current.Use();
-            }
-        }
-        if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25))) OpenAddColumnWindow(selectedTableForContent);
-        EditorGUILayout.EndHorizontal();
-
-        // **Table Rows**
-        foreach (var row in table.Data)
-        {
+            // **Column Headers with Right-Click Menu**
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-
-            foreach (var column in row.Keys)
+            foreach (var column in table.Data[0].Keys)
             {
-                object value = row[column];
+                string displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
+                GUIStyle columnStyle = new GUIStyle(GUI.skin.label)
+                    { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
 
-                Rect cellRect = GUILayoutUtility.GetRect(120, 25);
-                GUI.Box(cellRect, "", EditorStyles.helpBox);
+                Rect headerRect = GUILayoutUtility.GetRect(120, 25);
+                GUI.Box(headerRect, displayColumn, columnStyle);
 
-                // **Right-Click Context Menu for Cells**
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 && cellRect.Contains(Event.current.mousePosition))
+                // **Right-Click Context Menu for Column Headers**
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
+                    headerRect.Contains(Event.current.mousePosition))
                 {
-                    ShowCellContextMenu(selectedTableForContent, row, column, ConvertValueToString(value));
+                    ShowColumnContextMenu(column, selectedTableForContent);
                     Event.current.Use();
                 }
+            }
 
-                // **Ensure SerializedObject for Higher Types**
-                SerializedObject serializedObject = new SerializedObject(this);
-                SerializedProperty property = serializedObject.FindProperty(column);
+            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25)))
+                OpenAddColumnWindow(selectedTableForContent);
+            EditorGUILayout.EndHorizontal();
 
-                GUIStyle cellStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter };
+            // **Table Rows**
+            foreach (var row in table.Data)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-                // **GameObject and Sprite Fields**
-                if (column.Contains("GameObject") || column.Contains("Sprite") || column.Contains("higher"))
+                foreach (var column in row.Keys)
                 {
-                    EditorGUI.BeginChangeCheck();
-                    Object newObject = EditorGUI.ObjectField(cellRect, (Object)value, column.Contains("GameObject") ? typeof(GameObject) : typeof(Sprite), false);
-                    if (EditorGUI.EndChangeCheck())
+                    object value = row[column];
+
+                    Rect cellRect = GUILayoutUtility.GetRect(120, 25);
+                    GUI.Box(cellRect, "", EditorStyles.helpBox);
+
+                    // **Right-Click Context Menu for Cells**
+                    if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
+                        cellRect.Contains(Event.current.mousePosition))
                     {
-                        UpdateCellValue(selectedTableForContent, row, column, newObject);
+                        ShowCellContextMenu(selectedTableForContent, row, column, ConvertValueToString(value));
+                        Event.current.Use();
+                    }
+
+                    // **Fetch Column Type from Database**
+                    string columnType = database.GetColumnType(selectedTableForContent, column);
+
+                    // **Ensure PropertyField Always Renders for Unity Object Types**
+                    if (columnType == "GameObject" || columnType == "Sprite")
+                    {
+                        EditorGUI.BeginChangeCheck();
+                        Object newObject = EditorGUI.ObjectField(cellRect, value as UnityEngine.Object,
+                            columnType == "GameObject" ? typeof(GameObject) : typeof(Sprite), false);
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            UpdateCellValue(selectedTableForContent, row, column, newObject);
+                        }
+                    }
+                    // **Standard Label for Text/Numeric Values**
+                    else
+                    {
+                        string cellValue = value?.ToString() ?? ""; // Remove "NULL" label
+                        GUI.Label(cellRect, cellValue,
+                            new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter });
                     }
                 }
-                // **Standard Label for Text/Numeric Values**
-                else
-                {
-                    string cellValue = value?.ToString() ?? "NULL";
-                    GUI.Label(cellRect, cellValue, cellStyle);
-                }
+
+                if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25)))
+                    ShowRowContextMenu(selectedTableForContent, row);
+                EditorGUILayout.EndHorizontal();
             }
-            if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25))) ShowRowContextMenu(selectedTableForContent, row);
-            EditorGUILayout.EndHorizontal();
+
+            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25)))
+                OpenAddRowWindow(selectedTableForContent);
+        }
+        else
+        {
+            EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
+            if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
         }
 
-        if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
+        EditorGUILayout.EndScrollView();
     }
-    else
-    {
-        EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
-        if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
-    }
-    EditorGUILayout.EndScrollView();
-}
 
     private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
     {
@@ -437,7 +440,7 @@ public partial class UnitySQLManager : EditorWindow
         menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
         menu.ShowAsContext();
     }
-    
+
     private string ConvertValueToString(object value)
     {
         if (value == null)
@@ -474,7 +477,8 @@ public partial class UnitySQLManager : EditorWindow
         }
     }
 
-    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, object newValue)
+    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
+        object newValue)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
@@ -482,23 +486,18 @@ public partial class UnitySQLManager : EditorWindow
         {
             string convertedValue = "";
 
+            // **Fetch Column Type**
+            string columnType = database.GetColumnType(tableName, columnName);
+
             if (newValue == null)
             {
-                convertedValue = ""; // Store as empty string in database
+                convertedValue = "NULL"; // Store as NULL in the database
             }
-            else if (newValue is Vector2 vector2)
-            {
-                convertedValue = $"{vector2.x},{vector2.y}";
-            }
-            else if (newValue is Vector3 vector3)
-            {
-                convertedValue = $"{vector3.x},{vector3.y},{vector3.z}";
-            }
-            else if (newValue is Sprite sprite)
+            else if (columnType == "Sprite" && newValue is Sprite sprite)
             {
                 convertedValue = AssetDatabase.GetAssetPath(sprite); // Store Sprite Asset Path
             }
-            else if (newValue is GameObject gameObject)
+            else if (columnType == "GameObject" && newValue is GameObject gameObject)
             {
                 convertedValue = AssetDatabase.GetAssetPath(gameObject); // Store GameObject Prefab Path
             }
@@ -512,7 +511,7 @@ public partial class UnitySQLManager : EditorWindow
         }
     }
 
-    
+
     private void CopyCellToClipboard(string cellValue)
     {
         EditorGUIUtility.systemCopyBuffer = cellValue;
@@ -562,11 +561,18 @@ public partial class UnitySQLManager : EditorWindow
     private void ShowColumnContextMenu(string columnName, string tableName)
     {
         GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Rename Column"), false, () => OpenRenameColumnWindow(tableName, columnName));
+        menu.AddItem(new GUIContent("Change Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
         menu.ShowAsContext();
     }
+
+    private void OpenChangeColumnWindow(string tableName, string columnName)
+    {
+        ChangeColumnWindow.ShowWindow(this,
+            connections[selectedConnectionIndex].Databases[selectedDatabaseIndex], tableName, columnName);
+    }
+
 
     private void OpenDeleteColumnWindow(string tableName, string columnName)
     {
@@ -585,7 +591,7 @@ public partial class UnitySQLManager : EditorWindow
     private void OpenRenameColumnWindow(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        RenameColumnWindow.ShowWindow(this, database, tableName, columnName);
+        ChangeColumnWindow.ShowWindow(this, database, tableName, columnName);
     }
 
     private void DrawSQLExecutor()
