@@ -11,7 +11,8 @@ public class ChangeValueWindow : EditorWindow
     private static string cellValue;
     private static string newValue;
 
-    public static void ShowWindow(Database db, string tblName, Dictionary<string, object> row, string colName, string oldValue)
+    public static void ShowWindow(Database db, string tblName, Dictionary<string, object> row, string colName,
+        string oldValue)
     {
         database = db;
         tableName = tblName;

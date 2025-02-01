@@ -63,7 +63,7 @@ public class Database
             }
         }
     }
-    
+
     public void InsertIntoTable(string tableName, Dictionary<string, object> rowData)
     {
         var table = Tables.FirstOrDefault(t => t.Name == tableName);
@@ -125,7 +125,7 @@ public class Database
         return "TEXT"; // Default fallback type
     }
 
-    
+
     public void AddColumnToTable(string tableName, string columnName, string columnType)
     {
         using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
@@ -142,80 +142,85 @@ public class Database
             Debug.Log($"[SUCCESS] Column '{columnName}' ({columnType}) added to {tableName}");
 
             // **2. Populate Existing Rows with Default Values**
-            string defaultValue = columnType.Contains("GameObject") || columnType.Contains("Sprite") ? null : GetDefaultValueForType(columnType);
+            string defaultValue = columnType.Contains("GameObject") || columnType.Contains("Sprite")
+                ? null
+                : GetDefaultValueForType(columnType);
             //if (defaultValue != null) // Only execute if default value is needed
             //{
-                string updateQuery = $"UPDATE {tableName} SET {columnName} = {defaultValue};";
-                using (var updateCommand = new Mono.Data.Sqlite.SqliteCommand(updateQuery, connection))
-                {
-                    updateCommand.ExecuteNonQuery();
-                }
-                Debug.Log($"[SUCCESS] Default value '{defaultValue}' set for all rows in column '{columnName}'");
+            string updateQuery = $"UPDATE {tableName} SET {columnName} = {defaultValue};";
+            using (var updateCommand = new Mono.Data.Sqlite.SqliteCommand(updateQuery, connection))
+            {
+                updateCommand.ExecuteNonQuery();
+            }
+
+            Debug.Log($"[SUCCESS] Default value '{defaultValue}' set for all rows in column '{columnName}'");
             //}
         }
     }
-public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
-{
-    using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+
+    public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
     {
-        connection.Open();
-
-        List<string> columnNames = new List<string>();
-        List<string> columnDefinitions = new List<string>();
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
-        using (var reader = command.ExecuteReader())
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
         {
-            while (reader.Read())
-            {
-                string colName = reader.GetString(1);
-                string colType = reader.GetString(2);
+            connection.Open();
 
-                if (colName == oldColumnName)
+            List<string> columnNames = new List<string>();
+            List<string> columnDefinitions = new List<string>();
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
                 {
-                    columnNames.Add(newColumnName);
-                    columnDefinitions.Add($"{newColumnName} {newColumnType}");
-                }
-                else
-                {
-                    columnNames.Add(colName);
-                    columnDefinitions.Add($"{colName} {colType}");
+                    string colName = reader.GetString(1);
+                    string colType = reader.GetString(2);
+
+                    if (colName == oldColumnName)
+                    {
+                        columnNames.Add(newColumnName);
+                        columnDefinitions.Add($"{newColumnName} {newColumnType}");
+                    }
+                    else
+                    {
+                        columnNames.Add(colName);
+                        columnDefinitions.Add($"{colName} {colType}");
+                    }
                 }
             }
+
+            string tempTableName = tableName + "_temp";
+            string newTableDefinition = string.Join(", ", columnDefinitions);
+            string columnList = string.Join(", ", columnNames);
+
+            string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
+            string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
+            string dropQuery = $"DROP TABLE {tableName};";
+            string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
+            {
+                command.ExecuteNonQuery();
+            }
+
+            Debug.Log(
+                $"Column '{oldColumnName}' changed to '{newColumnName}' with type '{newColumnType}' in table '{tableName}'.");
         }
-
-        string tempTableName = tableName + "_temp";
-        string newTableDefinition = string.Join(", ", columnDefinitions);
-        string columnList = string.Join(", ", columnNames);
-
-        string createQuery = $"CREATE TABLE {tempTableName} ({newTableDefinition});";
-        string copyDataQuery = $"INSERT INTO {tempTableName} SELECT {columnList} FROM {tableName};";
-        string dropQuery = $"DROP TABLE {tableName};";
-        string renameQuery = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(createQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(copyDataQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(dropQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        using (var command = new Mono.Data.Sqlite.SqliteCommand(renameQuery, connection))
-        {
-            command.ExecuteNonQuery();
-        }
-
-        Debug.Log($"Column '{oldColumnName}' changed to '{newColumnName}' with type '{newColumnType}' in table '{tableName}'.");
     }
-}
 
 
     private string GetDefaultValueForType(string columnType)
@@ -234,7 +239,7 @@ public void ChangeColumnType(string tableName, string oldColumnName, string newC
         return null; // No default needed
     }
 
-    
+
     public List<string> GetColumnNames(string tableName)
     {
         List<string> columns = new List<string>();

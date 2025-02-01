@@ -28,7 +28,7 @@ public class CreateTableWindow : EditorWindow
     {
         EditorGUILayout.BeginVertical("box");
         EditorGUILayout.LabelField($"Create a New Table in {database.Name}", EditorStyles.boldLabel);
-        
+
         tableName = EditorGUILayout.TextField("Table Name:", tableName);
 
         EditorGUILayout.Space(10);
@@ -54,7 +54,8 @@ public class CreateTableWindow : EditorWindow
             columnNames[i] = EditorGUILayout.TextField(columnNames[i], GUILayout.Width(200));
             columnTypes[i] = availableColumnTypes[
                 EditorGUILayout.Popup(
-                    Mathf.Clamp(System.Array.IndexOf(availableColumnTypes, columnTypes[i]), 0, availableColumnTypes.Length - 1),
+                    Mathf.Clamp(System.Array.IndexOf(availableColumnTypes, columnTypes[i]), 0,
+                        availableColumnTypes.Length - 1),
                     availableColumnTypes, GUILayout.Width(150)
                 )
             ];
@@ -82,6 +83,7 @@ public class CreateTableWindow : EditorWindow
                 {
                     isPrimaryKey[0] = true;
                 }
+
                 break;
             }
 
@@ -102,10 +104,12 @@ public class CreateTableWindow : EditorWindow
         {
             CreateTable();
         }
+
         if (GUILayout.Button("Cancel", GUILayout.Width(150)))
         {
             Close();
         }
+
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.EndVertical();

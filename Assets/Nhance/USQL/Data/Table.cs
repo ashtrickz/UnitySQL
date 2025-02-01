@@ -42,7 +42,9 @@ public class Table
 
                         if (columnType == "GameObject" || columnType == "Sprite")
                         {
-                            row[columnName] = value == null || string.IsNullOrEmpty(value.ToString()) ? null : AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(value.ToString());
+                            row[columnName] = value == null || string.IsNullOrEmpty(value.ToString())
+                                ? null
+                                : AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(value.ToString());
                         }
                         else
                         {
