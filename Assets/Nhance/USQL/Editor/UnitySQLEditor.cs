@@ -34,7 +34,7 @@ public partial class UnitySQLManager : EditorWindow
         window.LoadSessionData();
     }
 
-    private void SaveSessionData()
+    public void SaveSessionData()
     {
         SaveData saveData = new SaveData();
 
@@ -194,6 +194,7 @@ public partial class UnitySQLManager : EditorWindow
             }
 
             EditorGUILayout.BeginVertical(containerStyle);
+            EditorGUILayout.BeginHorizontal();
 
             bool isConnectionExpanded = connectionStates[connection];
             string connectionArrow = isConnectionExpanded ? "▼" : "▶";
@@ -203,6 +204,20 @@ public partial class UnitySQLManager : EditorWindow
                 connectionStates[connection] = !isConnectionExpanded;
                 SaveSessionData(); // Save expanded state
             }
+
+            // **"+" Button to Add Database**
+            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(20)))
+            {
+                OpenCreateDatabaseWindow(connection);
+            }
+
+            // **"X" Button to Remove Connection**
+            if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
+            {
+                OpenDeleteConnectionWindow(connection);
+            }
+
+            EditorGUILayout.EndHorizontal();
 
             if (isConnectionExpanded)
             {
@@ -229,16 +244,16 @@ public partial class UnitySQLManager : EditorWindow
                         SaveSessionData();
                     }
 
-                    // Refresh Tables Button
-                    if (GUILayout.Button("⟳", GUILayout.Width(25)))
-                    {
-                        database.RefreshTables();
-                    }
-
-                    // "+" Button for adding a new table
-                    if (GUILayout.Button("+", GUILayout.Width(25)))
+                    // **"+" Button to Add Table**
+                    if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(20)))
                     {
                         OpenCreateTableWindow(database);
+                    }
+
+                    // **"X" Button to Remove Database**
+                    if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
+                    {
+                        OpenDeleteDatabaseWindow(connection, database);
                     }
 
                     EditorGUILayout.EndHorizontal();
@@ -257,9 +272,10 @@ public partial class UnitySQLManager : EditorWindow
                                 SaveSessionData();
                             }
 
-                            if (GUILayout.Button("⟳", GUILayout.Width(25)))
+                            // **"X" Button to Remove Table**
+                            if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
                             {
-                                database.LoadTableContent(table.Name);
+                                OpenDeleteTableWindow(database, table.Name);
                             }
 
                             EditorGUILayout.EndHorizontal();
@@ -461,6 +477,55 @@ public partial class UnitySQLManager : EditorWindow
     }
 
 
+    public void RemoveConnection(DatabaseConnection connection)
+    {
+        connections.Remove(connection);
+        SaveSessionData();
+        Debug.Log($"[INFO] Connection '{connection.Name}' removed.");
+    }
+
+    public void RemoveDatabase(DatabaseConnection connection, Database database)
+    {
+        connection.Databases.Remove(database);
+        SaveSessionData();
+        Debug.Log($"[INFO] Database '{database.Name}' removed.");
+    }
+
+    public void RemoveTable(Database database, string tableName)
+    {
+        database.RemoveTable(tableName);
+        SaveSessionData();
+        Debug.Log($"[INFO] Table '{tableName}' removed.");
+    }
+
+    private void OpenDeleteConnectionWindow(DatabaseConnection connection)
+    {
+        ConfirmationWindow.ShowWindow(
+            "Delete Connection",
+            $"Are you sure you want to delete connection '{connection.Name}'?",
+            () => RemoveConnection(connection)
+        );
+    }
+
+    private void OpenDeleteDatabaseWindow(DatabaseConnection connection, Database database)
+    {
+        ConfirmationWindow.ShowWindow(
+            "Delete Database",
+            $"Are you sure you want to delete database '{database.Name}'?",
+            () => RemoveDatabase(connection, database)
+        );
+    }
+
+    private void OpenDeleteTableWindow(Database database, string tableName)
+    {
+        ConfirmationWindow.ShowWindow(
+            "Delete Table",
+            $"Are you sure you want to delete table '{tableName}'?",
+            () => RemoveTable(database, tableName)
+        );
+    }
+
+
     private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
         string cellValue)
     {
@@ -476,6 +541,11 @@ public partial class UnitySQLManager : EditorWindow
         }
     }
 
+    private void OpenCreateDatabaseWindow(DatabaseConnection connection)
+    {
+        CreateDatabaseWindow.ShowWindow(this, connection);
+    }
+    
     private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
         object newValue)
     {

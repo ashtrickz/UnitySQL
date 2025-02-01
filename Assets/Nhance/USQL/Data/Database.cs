@@ -696,7 +696,7 @@ public class Database
         }
     }
 
-    public void RemoveTable(Table table)
+    public void RemoveTable(string tableName)
     {
         // Logic for removing a table
     }
