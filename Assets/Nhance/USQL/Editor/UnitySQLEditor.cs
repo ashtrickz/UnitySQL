@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Sql;
 using System.Linq;
+using Mono.Data.Sqlite;
 using Object = UnityEngine.Object;
 
 public class UnitySQLManager : EditorWindow
@@ -28,6 +29,13 @@ public class UnitySQLManager : EditorWindow
     private const string SaveKey = "UnitySQLManager_SaveData";
 
     private GenericMenu columnContextMenu;
+
+    // SQL Tab
+
+    private List<string[]> tableData = new List<string[]>(); // Stores query results
+    private string[] columnNames = new string[0];
+    private string sqlExecutionMessage = "";
+    private Vector2 sqlScrollPosition;
 
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
@@ -551,7 +559,7 @@ public class UnitySQLManager : EditorWindow
             () => database.DeleteTable(tableName)
         );
     }
-    
+
     private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
         string cellValue)
     {
@@ -572,7 +580,8 @@ public class UnitySQLManager : EditorWindow
         CreateDatabaseWindow.ShowWindow(this, connection);
     }
 
-    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, object newValue)
+    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
+        object newValue)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
@@ -623,7 +632,6 @@ public class UnitySQLManager : EditorWindow
             }
         }
     }
-
 
 
     private void CopyCellToClipboard(string cellValue)
@@ -684,7 +692,6 @@ public class UnitySQLManager : EditorWindow
     }
 
 
-
     private void OpenDeleteColumnWindow(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -709,9 +716,113 @@ public class UnitySQLManager : EditorWindow
 
         if (GUILayout.Button("Execute"))
         {
-            database.ExecuteSQLQuery();
+            ExecuteSQLQuery(database);
+        }
+
+        // Display execution messages (errors or success)
+        if (!string.IsNullOrEmpty(sqlExecutionMessage))
+        {
+            EditorGUILayout.HelpBox(sqlExecutionMessage, MessageType.Info);
+        }
+
+        // Display table results
+        if (tableData.Count > 0)
+        {
+            DrawQueryResults();
         }
     }
+
+    private void ExecuteSQLQuery(Database database)
+    {
+        try
+        {
+            tableData.Clear(); // Clear previous results
+
+            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            {
+                connection.Open();
+                using (var dbCommand = connection.CreateCommand())
+                {
+                    dbCommand.CommandText = database.SQLQuery;
+
+                    if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ReadTableResults(dbCommand);
+                    }
+                    else
+                    {
+                        int affectedRows = dbCommand.ExecuteNonQuery();
+                        sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            sqlExecutionMessage = "Error: " + ex.Message;
+        }
+    }
+
+
+    private void ReadTableResults(IDbCommand dbCommand)
+    {
+        using (IDataReader reader = dbCommand.ExecuteReader())
+        {
+            int columnCount = reader.FieldCount;
+            columnNames = new string[columnCount];
+
+            for (int i = 0; i < columnCount; i++)
+            {
+                columnNames[i] = reader.GetName(i);
+            }
+
+            while (reader.Read())
+            {
+                string[] row = new string[columnCount];
+                for (int i = 0; i < columnCount; i++)
+                {
+                    row[i] = reader.GetValue(i).ToString();
+                }
+
+                tableData.Add(row);
+            }
+        }
+
+        sqlExecutionMessage = "Query executed successfully.";
+    }
+
+    private void DrawQueryResults()
+    {
+        GUILayout.Label("Query Results", EditorStyles.boldLabel);
+        sqlScrollPosition = EditorGUILayout.BeginScrollView(sqlScrollPosition, GUILayout.Height(300));
+
+        // Draw column headers
+        if (columnNames.Length > 0)
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            foreach (string col in columnNames)
+            {
+                GUILayout.Label(col, EditorStyles.boldLabel, GUILayout.Width(150));
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        // Draw table rows
+        foreach (var row in tableData)
+        {
+            EditorGUILayout.BeginHorizontal();
+            foreach (var cell in row)
+            {
+                GUILayout.Label(cell, GUILayout.Width(150));
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
 
     private void DrawPlaceholder()
     {
