@@ -22,6 +22,7 @@ public class UnitySQLManager : EditorWindow
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
     private string[] availableColumnTypes = {"TEXT", "INTEGER", "REAL", "BLOB"}; // Available column types
+    private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
 
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
@@ -334,7 +335,7 @@ public class UnitySQLManager : EditorWindow
             EditorGUILayout.EndVertical();
             return;
         }
-        
+
         selectedTab = GUILayout.Toolbar(selectedTab, tabs);
 
         switch (selectedTab)
@@ -362,8 +363,113 @@ public class UnitySQLManager : EditorWindow
 
     private void DrawSearch()
     {
-        EditorGUILayout.LabelField("Placeholder tab for future features.", EditorStyles.boldLabel);
+        if (string.IsNullOrEmpty(selectedTableForContent))
+        {
+            EditorGUILayout.LabelField("Select a table to search.", EditorStyles.boldLabel);
+            return;
+        }
+
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        if (columns == null || columns.Count == 0)
+        {
+            EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
+                EditorStyles.boldLabel);
+            return;
+        }
+
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+        EditorGUILayout.LabelField($"Search in table: {selectedTableForContent}", EditorStyles.boldLabel);
+
+        // Table Header
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
+        EditorGUILayout.LabelField("Operator", EditorStyles.boldLabel, GUILayout.Width(100));
+        EditorGUILayout.LabelField("Value", EditorStyles.boldLabel, GUILayout.Width(150));
+        EditorGUILayout.EndHorizontal();
+
+        // Dynamic search filters
+        if (searchFilters == null || searchFilters.Count != columns.Count)
+        {
+            searchFilters = new List<SearchFilter>();
+            foreach (var column in columns)
+            {
+                searchFilters.Add(new SearchFilter {Column = column.Name, Operator = "=", Value = ""});
+            }
+        }
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
+            // Column Name
+            EditorGUILayout.LabelField(columns[i].Name, GUILayout.Width(150));
+
+            // Operator Selection (Fixed!)
+            int selectedOperatorIndex = Array.IndexOf(availableOperators, searchFilters[i].Operator);
+            selectedOperatorIndex =
+                EditorGUILayout.Popup(selectedOperatorIndex, availableOperators, GUILayout.Width(100));
+            searchFilters[i].Operator = availableOperators[selectedOperatorIndex];
+
+            // Value Input
+            searchFilters[i].Value = EditorGUILayout.TextField(searchFilters[i].Value, GUILayout.Width(150));
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        // Search Button
+        if (GUILayout.Button("🔍 Search", GUILayout.Height(30)))
+        {
+            ExecuteSearchQuery(database);
+        }
+
+        EditorGUILayout.EndScrollView();
+
+        // Display search results
+        if (tableData.Count > 0)
+        {
+            DrawQueryResults();
+        }
     }
+
+    private void ExecuteSearchQuery(Database database)
+    {
+        try
+        {
+            tableData.Clear(); // Clear previous results
+            List<string> conditions = new List<string>();
+
+            foreach (var filter in searchFilters)
+            {
+                if (!string.IsNullOrEmpty(filter.Value))
+                {
+                    conditions.Add($"{filter.Column} {filter.Operator} '{filter.Value}'");
+                }
+            }
+
+            string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+            string query = $"SELECT * FROM {selectedTableForContent} {whereClause};";
+
+            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            {
+                connection.Open();
+                using (var dbCommand = connection.CreateCommand())
+                {
+                    dbCommand.CommandText = query;
+                    ReadTableResults(dbCommand);
+                }
+            }
+
+            sqlExecutionMessage = "Search executed successfully.";
+        }
+        catch (Exception ex)
+        {
+            sqlExecutionMessage = "Error: " + ex.Message;
+        }
+    }
+
 
     private void DrawDatabaseStructure()
     {
@@ -414,6 +520,9 @@ public class UnitySQLManager : EditorWindow
             // Search Button
             if (GUILayout.Button("🔍 Search", GUILayout.Width(85)))
             {
+                selectedTableForContent = table;
+                database.LoadTableContent(table);
+                selectedTab = 2;
             }
 
             // Insert Button
@@ -1008,6 +1117,16 @@ public class UnitySQLManager : EditorWindow
         public string Key;
         public string Value;
     }
+
+    private List<SearchFilter> searchFilters = new List<SearchFilter>();
+
+    private class SearchFilter
+    {
+        public string Column;
+        public string Operator;
+        public string Value;
+    }
+
 
     [System.Serializable]
     private class SaveData

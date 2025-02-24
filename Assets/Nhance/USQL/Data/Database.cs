@@ -851,6 +851,4 @@ public class Database
         public string Type;
         public bool IsPrimaryKey;
     }
-
-    
 }
