@@ -508,26 +508,7 @@ public class UnitySQLManager : EditorWindow
         }
 
         GUILayout.FlexibleSpace();
-        if (GUILayout.Button("📄 View", GUILayout.Width(80)))
-        {
-            PerformBulkTableAction("View");
-        }
-
-        if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
-        {
-            PerformBulkTableAction("Structure");
-        }
-
-        if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
-        {
-            PerformBulkTableAction("Search");
-        }
-
-        if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
-        {
-            PerformBulkTableAction("Insert");
-        }
-
+        
         if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
         {
             PerformBulkTableAction("Clear");
@@ -556,26 +537,6 @@ public class UnitySQLManager : EditorWindow
             }
 
             // Action Buttons for Each Table
-            if (GUILayout.Button("📄 View", GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "View");
-            }
-
-            if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
-            {
-                ExecuteTableAction(table, "Structure");
-            }
-
-            if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Search");
-            }
-
-            if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Insert");
-            }
-
             if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Clear");
@@ -1301,11 +1262,8 @@ public class UnitySQLManager : EditorWindow
                         "Yes", "No"))
                 {
                     var table = database.Tables.First(t => t.Name == tableName);
-
                     foreach (var data in table.Data)
-                    {
                         data.Clear();
-                    }
                 }
 
                 break;
