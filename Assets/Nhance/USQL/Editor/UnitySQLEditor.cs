@@ -793,6 +793,8 @@ public class UnitySQLManager : EditorWindow
                     }
                 }
             }
+            
+            DrawConnectionsPanel();
         }
         catch (Exception ex)
         {
