@@ -880,7 +880,7 @@ public class UnitySQLManager : EditorWindow
     private void ShowColumnContextMenu(string columnName, string tableName)
     {
         GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Change Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
+        menu.AddItem(new GUIContent("Edit Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
         menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
         menu.ShowAsContext();
@@ -1031,6 +1031,9 @@ public class UnitySQLManager : EditorWindow
     }
 
 
+    private List<bool> columnSelections = new List<bool>();
+    private bool selectAllColumns = false;
+
     private void DrawStructure()
     {
         if (string.IsNullOrEmpty(selectedTableForContent))
@@ -1050,19 +1053,63 @@ public class UnitySQLManager : EditorWindow
             return;
         }
 
+        // Ensure columnSelections list is the correct size
+        if (columnSelections.Count != columns.Count)
+        {
+            columnSelections = new List<bool>(new bool[columns.Count]);
+        }
+
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+        // Bulk Actions Header
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
+        if (GUILayout.Button("Select All", GUILayout.Width(100)))
+        {
+            for (int i = 0; i < columnSelections.Count; i++)
+            {
+                columnSelections[i] = selectAllColumns;
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+        {
+            PerformBulkAction("View");
+        }
+
+        if (GUILayout.Button("✏️ Edit", GUILayout.Width(80)))
+        {
+            PerformBulkAction("Edit");
+        }
+
+        if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+        {
+            PerformBulkAction("Delete");
+        }
+
+        if (GUILayout.Button("🔑 Primary Key", GUILayout.Width(120)))
+        {
+            PerformBulkAction("PrimaryKey");
+        }
+
+        EditorGUILayout.EndHorizontal();
 
         // Table header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        EditorGUILayout.LabelField("✔", GUILayout.Width(20));
         EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
         EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(100));
         EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
         EditorGUILayout.EndHorizontal();
 
         // Table rows
-        foreach (var column in columns)
+        for (int i = 0; i < columns.Count; i++)
         {
+            var column = columns[i];
+
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
             EditorGUILayout.LabelField(column.Name, GUILayout.Width(150));
             EditorGUILayout.LabelField(column.Type, GUILayout.Width(100));
             EditorGUILayout.LabelField(column.IsPrimaryKey ? "✅ Yes" : "❌ No", GUILayout.Width(100));
@@ -1163,6 +1210,52 @@ public class UnitySQLManager : EditorWindow
         {
             database.AddColumn(tableName, columnName, columnType);
             database.LoadTableContent(tableName);
+        }
+    }
+
+    private void PerformBulkAction(string action)
+    {
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        for (int i = 0; i < columns.Count; i++)
+        {
+            if (columnSelections[i])
+            {
+                string columnName = columns[i].Name;
+
+                switch (action)
+                {
+                    case "View":
+                        selectedTab = 3; // Switch to SQL Tab
+
+                        // Get selected columns
+                        List<string> selectedColumns = new List<string>();
+                        foreach (var col in columns.Where((col, index) => columnSelections[index]))
+                        {
+                            selectedColumns.Add(col.Name);
+                        }
+
+                        if (selectedColumns.Count > 0)
+                        {
+                            // Construct the SELECT query
+                            database.SQLQuery = $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
+                            ExecuteSQLQuery(database);
+                        }
+                        break;
+
+                    case "Edit":
+                        OpenChangeColumnWindow(selectedTableForContent, columnName);
+                        break;
+                    case "Delete":
+                        OpenDeleteColumnWindow(selectedTableForContent, columnName);
+                        break;
+                    case "PrimaryKey":
+                        database.MakePrimaryKey(selectedTableForContent, columnName);
+                        break;
+                }
+            }
         }
     }
 }
