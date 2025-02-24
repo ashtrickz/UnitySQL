@@ -13,7 +13,7 @@ public class UnitySQLManager : EditorWindow
     private List<DatabaseConnection> connections = new List<DatabaseConnection>();
     private int selectedConnectionIndex = -1;
     private int selectedDatabaseIndex = -1;
-    private string[] tabs = {"Database Structure", "Structure", "Search", "SQL"};
+    private string[] tabs = {"Overview", "Structure", "Search", "SQL"};
     private int selectedTab = 0;
     private string selectedTable;
     private string newEntryData = "";
