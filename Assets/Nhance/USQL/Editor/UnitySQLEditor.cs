@@ -247,7 +247,7 @@ public class UnitySQLManager : EditorWindow
 
                     // EditorGUILayout.BeginVertical();
 
-                    if (GUILayout.Button($" {databaseArrow}", EditorStyles.boldLabel,GUILayout.Width(15)))
+                    if (GUILayout.Button($" {databaseArrow}", EditorStyles.boldLabel, GUILayout.Width(15)))
                     {
                         databaseStates[database] = !isDatabaseExpanded;
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
@@ -256,7 +256,7 @@ public class UnitySQLManager : EditorWindow
                     }
 
                     if (GUILayout.Button($"\t{database.Name}", EditorStyles.boldLabel,
-                        GUILayout.ExpandWidth(true)))
+                            GUILayout.ExpandWidth(true)))
                     {
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
                         selectedConnectionIndex = i;
@@ -265,7 +265,7 @@ public class UnitySQLManager : EditorWindow
                     }
 
                     // EditorGUILayout.EndVertical();
-                    
+
                     // **"+" Button to Add Table**
                     if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
                     {
@@ -393,30 +393,23 @@ public class UnitySQLManager : EditorWindow
 
             // Insert Button
             if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
-            {
-                Debug.Log($"Inserting into table: {table}");
-                // Implement insert functionality here
-            }
+                OpenAddRowWindow(table);
 
             // Clear Button
             if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
             {
-                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{table}'?", "Yes", "No"))
+                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{table}'?",
+                        "Yes", "No"))
                 {
-                    // database.ClearTable(table);
-                    Debug.Log($"Cleared table: {table}");
+                    var currentTable = database.Tables.First(t => t.Name == table);
+                    foreach (var currentTableData in currentTable.Data)
+                        database.DeleteRowFromTable(table, currentTableData);
                 }
             }
 
             // Delete Button
             if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
-            {
-                if (EditorUtility.DisplayDialog("Confirm Delete", $"Are you sure you want to delete table '{table}'?", "Yes", "No"))
-                {
-                    database.DeleteTable(table);
-                    Debug.Log($"Deleted table: {table}");
-                }
-            }
+                OpenDeleteTableWindow(database, table);
 
             EditorGUILayout.EndHorizontal();
         }
@@ -424,7 +417,7 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.EndScrollView();
     }
 
-    
+
     private void OpenCreateTableWindow(Database database)
     {
         CreateTableWindow.ShowWindow(database);
@@ -834,7 +827,7 @@ public class UnitySQLManager : EditorWindow
                     }
                 }
             }
-            
+
             DrawConnectionsPanel();
         }
         catch (Exception ex)
