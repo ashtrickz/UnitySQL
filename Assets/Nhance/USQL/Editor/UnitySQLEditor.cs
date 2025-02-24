@@ -381,6 +381,7 @@ public class UnitySQLManager : EditorWindow
             if (GUILayout.Button(table, EditorStyles.label, GUILayout.Width(200)))
             {
                 selectedTableForContent = table;
+                database.LoadTableContent(table);
                 SaveSessionData();
             }
 
