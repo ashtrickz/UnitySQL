@@ -216,13 +216,13 @@ public class UnitySQLManager : EditorWindow
             }
 
             // **"+" Button to Add Database**
-            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(20)))
+            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenCreateDatabaseWindow(connection);
             }
 
             // **"X" Button to Remove Connection**
-            if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
+            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenDeleteConnectionWindow(connection);
             }
@@ -258,6 +258,8 @@ public class UnitySQLManager : EditorWindow
                     if (GUILayout.Button($"\t{database.Name}", EditorStyles.boldLabel,
                         GUILayout.ExpandWidth(true)))
                     {
+                        selectedDatabaseIndex = connection.Databases.IndexOf(database);
+                        selectedConnectionIndex = i;
                         selectedTableForContent = null;
                         SaveSessionData();
                     }
@@ -265,13 +267,13 @@ public class UnitySQLManager : EditorWindow
                     // EditorGUILayout.EndVertical();
                     
                     // **"+" Button to Add Table**
-                    if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(20)))
+                    if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
                     {
                         OpenCreateTableWindow(database);
                     }
 
                     // **"X" Button to Remove Database**
-                    if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
+                    if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
                     {
                         OpenDeleteDatabaseWindow(connection, database);
                     }
@@ -293,7 +295,7 @@ public class UnitySQLManager : EditorWindow
                             }
 
                             // **"X" Button to Remove Table**
-                            if (GUILayout.Button("x", GUILayout.Width(25), GUILayout.Height(20)))
+                            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
                             {
                                 OpenDeleteTableWindow(database, table.Name);
                             }
@@ -369,15 +371,54 @@ public class UnitySQLManager : EditorWindow
         List<string> tables = database.GetTableNames();
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-        EditorGUILayout.LabelField("Tables:", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Tables (click to open):", EditorStyles.boldLabel);
 
         foreach (string table in tables)
         {
-            if (GUILayout.Button(table, EditorStyles.label))
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
+            // Table Name
+            if (GUILayout.Button(table, EditorStyles.label, GUILayout.Width(200)))
             {
                 selectedTableForContent = table;
                 SaveSessionData();
             }
+
+            // Search Button
+            if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
+            {
+                Debug.Log($"Searching in table: {table}");
+                // Implement search functionality here
+            }
+
+            // Insert Button
+            if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
+            {
+                Debug.Log($"Inserting into table: {table}");
+                // Implement insert functionality here
+            }
+
+            // Clear Button
+            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+            {
+                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{table}'?", "Yes", "No"))
+                {
+                    // database.ClearTable(table);
+                    Debug.Log($"Cleared table: {table}");
+                }
+            }
+
+            // Delete Button
+            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            {
+                if (EditorUtility.DisplayDialog("Confirm Delete", $"Are you sure you want to delete table '{table}'?", "Yes", "No"))
+                {
+                    database.DeleteTable(table);
+                    Debug.Log($"Deleted table: {table}");
+                }
+            }
+
+            EditorGUILayout.EndHorizontal();
         }
 
         EditorGUILayout.EndScrollView();
@@ -421,7 +462,7 @@ public class UnitySQLManager : EditorWindow
                 }
             }
 
-            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25)))
+            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(25)))
                 OpenAddColumnWindow(selectedTableForContent);
             EditorGUILayout.EndHorizontal();
 
@@ -481,7 +522,7 @@ public class UnitySQLManager : EditorWindow
                 EditorGUILayout.EndHorizontal();
             }
 
-            if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(25)))
+            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(25)))
                 OpenAddRowWindow(selectedTableForContent);
         }
         else
