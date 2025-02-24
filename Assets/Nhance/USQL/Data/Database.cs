@@ -19,6 +19,28 @@ public class Database
         RefreshTables();
     }
 
+    public List<string> GetTableNames()
+    {
+        List<string> tables = new List<string>();
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        tables.Add(reader.GetString(0));
+                    }
+                }
+            }
+        }
+        return tables;
+    }
+
+    
     public void RefreshTables()
     {
         Tables.Clear();

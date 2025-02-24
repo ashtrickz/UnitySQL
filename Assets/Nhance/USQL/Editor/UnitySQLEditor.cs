@@ -245,8 +245,9 @@ public class UnitySQLManager : EditorWindow
                     EditorGUILayout.BeginHorizontal();
                     GUILayout.Space(15);
 
-                    if (GUILayout.Button($" {databaseArrow}\t {database.Name}", EditorStyles.boldLabel,
-                            GUILayout.ExpandWidth(true)))
+                    // EditorGUILayout.BeginVertical();
+
+                    if (GUILayout.Button($" {databaseArrow}", EditorStyles.boldLabel,GUILayout.Width(15)))
                     {
                         databaseStates[database] = !isDatabaseExpanded;
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
@@ -254,6 +255,15 @@ public class UnitySQLManager : EditorWindow
                         SaveSessionData();
                     }
 
+                    if (GUILayout.Button($"\t{database.Name}", EditorStyles.boldLabel,
+                        GUILayout.ExpandWidth(true)))
+                    {
+                        selectedTableForContent = null;
+                        SaveSessionData();
+                    }
+
+                    // EditorGUILayout.EndVertical();
+                    
                     // **"+" Button to Add Table**
                     if (GUILayout.Button("+", GUILayout.Width(25), GUILayout.Height(20)))
                     {
@@ -326,8 +336,12 @@ public class UnitySQLManager : EditorWindow
         switch (selectedTab)
         {
             case 0:
-                DrawDatabaseStructure();
+                if (!string.IsNullOrEmpty(selectedTableForContent))
+                    DrawDatabaseStructure();
+                else
+                    DrawDatabaseTables();
                 break;
+
             case 1:
                 DrawSQLExecutor();
                 break;
@@ -347,6 +361,29 @@ public class UnitySQLManager : EditorWindow
         DrawTableContentUI(database); // Only show table content
     }
 
+    private void DrawDatabaseTables()
+    {
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<string> tables = database.GetTableNames();
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+        EditorGUILayout.LabelField("Tables:", EditorStyles.boldLabel);
+
+        foreach (string table in tables)
+        {
+            if (GUILayout.Button(table, EditorStyles.label))
+            {
+                selectedTableForContent = table;
+                SaveSessionData();
+            }
+        }
+
+        EditorGUILayout.EndScrollView();
+    }
+
+    
     private void OpenCreateTableWindow(Database database)
     {
         CreateTableWindow.ShowWindow(database);
