@@ -479,19 +479,73 @@ public class UnitySQLManager : EditorWindow
         DrawTableContentUI(database); // Only show table content
     }
 
+    private List<bool> tableSelections = new List<bool>();
+    private bool selectAllTables = false;
+
     private void DrawDatabaseTables()
     {
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
         List<string> tables = database.GetTableNames();
+        if (tableSelections.Count != tables.Count)
+        {
+            tableSelections = new List<bool>(new bool[tables.Count]);
+        }
+
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-        EditorGUILayout.LabelField("Tables:", EditorStyles.boldLabel);
+        // Bulk Actions Header
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        selectAllTables = EditorGUILayout.Toggle(selectAllTables, GUILayout.Width(20));
 
-        foreach (string table in tables)
+        if (GUILayout.Button("Select All", GUILayout.Width(100)))
+        {
+            for (int i = 0; i < tableSelections.Count; i++)
+            {
+                tableSelections[i] = selectAllTables;
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+        {
+            PerformBulkTableAction("View");
+        }
+
+        if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
+        {
+            PerformBulkTableAction("Structure");
+        }
+
+        if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
+        {
+            PerformBulkTableAction("Search");
+        }
+
+        if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
+        {
+            PerformBulkTableAction("Insert");
+        }
+
+        if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+        {
+            PerformBulkTableAction("Clear");
+        }
+
+        if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+        {
+            PerformBulkTableAction("Delete");
+        }
+
+        EditorGUILayout.EndHorizontal();
+
+        // Table list with checkboxes
+        foreach (var (table, index) in tables.Select((table, index) => (table, index)))
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
+            tableSelections[index] = EditorGUILayout.Toggle(tableSelections[index], GUILayout.Width(20));
 
             // Table Name
             if (GUILayout.Button(table, EditorStyles.label, GUILayout.Width(200)))
@@ -501,49 +555,36 @@ public class UnitySQLManager : EditorWindow
                 SaveSessionData();
             }
 
-            // View Button
-            if (GUILayout.Button("\ud83d\udcc4 View", GUILayout.Width(85)))
+            // Action Buttons for Each Table
+            if (GUILayout.Button("📄 View", GUILayout.Width(80)))
             {
-                selectedTableForContent = table;
-                database.LoadTableContent(table);
-                SaveSessionData();
+                ExecuteTableAction(table, "View");
             }
 
-            // Structure Button
-            if (GUILayout.Button("🏗️ Structure", GUILayout.Width(85)))
+            if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
             {
-                selectedTableForContent = table;
-                database.LoadTableContent(table);
-                selectedTab = 1;
+                ExecuteTableAction(table, "Structure");
             }
 
-            // Search Button
-            if (GUILayout.Button("🔍 Search", GUILayout.Width(85)))
+            if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
             {
-                selectedTableForContent = table;
-                database.LoadTableContent(table);
-                selectedTab = 2;
+                ExecuteTableAction(table, "Search");
             }
 
-            // Insert Button
-            if (GUILayout.Button("➕ Insert", GUILayout.Width(85)))
-                OpenAddRowWindow(table);
-
-            // Clear Button
-            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(85)))
+            if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
             {
-                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{table}'?",
-                        "Yes", "No"))
-                {
-                    var currentTable = database.Tables.First(t => t.Name == table);
-                    foreach (var currentTableData in currentTable.Data)
-                        database.DeleteRowFromTable(table, currentTableData);
-                }
+                ExecuteTableAction(table, "Insert");
             }
 
-            // Delete Button
-            if (GUILayout.Button("❌ Delete", GUILayout.Width(85)))
-                OpenDeleteTableWindow(database, table);
+            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+            {
+                ExecuteTableAction(table, "Clear");
+            }
+
+            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            {
+                ExecuteTableAction(table, "Delete");
+            }
 
             EditorGUILayout.EndHorizontal();
         }
@@ -1213,6 +1254,69 @@ public class UnitySQLManager : EditorWindow
         }
     }
 
+    private void PerformBulkTableAction(string action)
+    {
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<string> tables = database.GetTableNames();
+        for (int i = 0; i < tables.Count; i++)
+        {
+            if (tableSelections[i])
+            {
+                ExecuteTableAction(tables[i], action);
+            }
+        }
+    }
+
+    private void ExecuteTableAction(string tableName, string action)
+    {
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        switch (action)
+        {
+            case "View":
+                selectedTab = 3; // Switch to SQL Tab
+                database.SQLQuery = $"SELECT * FROM {tableName};";
+                ExecuteSQLQuery(database);
+                break;
+
+            case "Structure":
+                selectedTab = 1; // Switch to Structure Tab
+                selectedTableForContent = tableName;
+                break;
+
+            case "Search":
+                selectedTab = 2; // Switch to Search Tab
+                selectedTableForContent = tableName;
+                break;
+
+            case "Insert":
+                OpenAddRowWindow(tableName);
+                break;
+
+            case "Clear":
+                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{tableName}'?",
+                        "Yes", "No"))
+                {
+                    var table = database.Tables.First(t => t.Name == tableName);
+
+                    foreach (var data in table.Data)
+                    {
+                        data.Clear();
+                    }
+                }
+
+                break;
+
+            case "Delete":
+                OpenDeleteTableWindow(database, tableName);
+                break;
+        }
+    }
+
+
     private void PerformBulkAction(string action)
     {
         var connection = connections[selectedConnectionIndex];
@@ -1240,9 +1344,11 @@ public class UnitySQLManager : EditorWindow
                         if (selectedColumns.Count > 0)
                         {
                             // Construct the SELECT query
-                            database.SQLQuery = $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
+                            database.SQLQuery =
+                                $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
                             ExecuteSQLQuery(database);
                         }
+
                         break;
 
                     case "Edit":
