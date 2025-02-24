@@ -817,4 +817,40 @@ public class Database
     }
 
 
+    public List<TableColumn> GetTableColumns(string tableName)
+    {
+        List<TableColumn> columns = new List<TableColumn>();
+
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = $"PRAGMA table_info({tableName});";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        columns.Add(new TableColumn
+                        {
+                            Name = reader["name"].ToString(),
+                            Type = reader["type"].ToString(),
+                            IsPrimaryKey = reader["pk"].ToString() == "1"
+                        });
+                    }
+                }
+            }
+        }
+
+        return columns;
+    }
+
+    public class TableColumn
+    {
+        public string Name;
+        public string Type;
+        public bool IsPrimaryKey;
+    }
+
+    
 }

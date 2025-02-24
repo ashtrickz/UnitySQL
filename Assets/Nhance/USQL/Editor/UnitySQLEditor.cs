@@ -13,7 +13,7 @@ public class UnitySQLManager : EditorWindow
     private List<DatabaseConnection> connections = new List<DatabaseConnection>();
     private int selectedConnectionIndex = -1;
     private int selectedDatabaseIndex = -1;
-    private string[] tabs = {"Database Structure", "SQL", "Placeholder"};
+    private string[] tabs = {"Database Structure", "Structure", "Search", "SQL"};
     private int selectedTab = 0;
     private string selectedTable;
     private string newEntryData = "";
@@ -258,6 +258,7 @@ public class UnitySQLManager : EditorWindow
                     if (GUILayout.Button($"\t{database.Name}", EditorStyles.boldLabel,
                             GUILayout.ExpandWidth(true)))
                     {
+                        selectedTab = 0;
                         selectedDatabaseIndex = connection.Databases.IndexOf(database);
                         selectedConnectionIndex = i;
                         selectedTableForContent = null;
@@ -289,6 +290,7 @@ public class UnitySQLManager : EditorWindow
 
                             if (GUILayout.Button($" -\t {table.Name}", EditorStyles.boldLabel))
                             {
+                                selectedTab = 0;
                                 selectedTableForContent = table.Name;
                                 database.LoadTableContent(selectedTableForContent);
                                 SaveSessionData();
@@ -332,7 +334,7 @@ public class UnitySQLManager : EditorWindow
             EditorGUILayout.EndVertical();
             return;
         }
-
+        
         selectedTab = GUILayout.Toolbar(selectedTab, tabs);
 
         switch (selectedTab)
@@ -345,14 +347,22 @@ public class UnitySQLManager : EditorWindow
                 break;
 
             case 1:
-                DrawSQLExecutor();
+                DrawStructure();
                 break;
             case 2:
-                DrawPlaceholder();
+                DrawSearch();
+                break;
+            case 3:
+                DrawSQLExecutor();
                 break;
         }
 
         EditorGUILayout.EndVertical();
+    }
+
+    private void DrawSearch()
+    {
+        EditorGUILayout.LabelField("Placeholder tab for future features.", EditorStyles.boldLabel);
     }
 
     private void DrawDatabaseStructure()
@@ -371,7 +381,7 @@ public class UnitySQLManager : EditorWindow
         List<string> tables = database.GetTableNames();
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-        EditorGUILayout.LabelField("Tables (click to open):", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Tables:", EditorStyles.boldLabel);
 
         foreach (string table in tables)
         {
@@ -385,19 +395,33 @@ public class UnitySQLManager : EditorWindow
                 SaveSessionData();
             }
 
-            // Search Button
-            if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
+            // View Button
+            if (GUILayout.Button("\ud83d\udcc4 View", GUILayout.Width(85)))
             {
-                Debug.Log($"Searching in table: {table}");
-                // Implement search functionality here
+                selectedTableForContent = table;
+                database.LoadTableContent(table);
+                SaveSessionData();
+            }
+
+            // Structure Button
+            if (GUILayout.Button("🏗️ Structure", GUILayout.Width(85)))
+            {
+                selectedTableForContent = table;
+                database.LoadTableContent(table);
+                selectedTab = 1;
+            }
+
+            // Search Button
+            if (GUILayout.Button("🔍 Search", GUILayout.Width(85)))
+            {
             }
 
             // Insert Button
-            if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
+            if (GUILayout.Button("➕ Insert", GUILayout.Width(85)))
                 OpenAddRowWindow(table);
 
             // Clear Button
-            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(85)))
             {
                 if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{table}'?",
                         "Yes", "No"))
@@ -409,7 +433,7 @@ public class UnitySQLManager : EditorWindow
             }
 
             // Delete Button
-            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            if (GUILayout.Button("❌ Delete", GUILayout.Width(85)))
                 OpenDeleteTableWindow(database, table);
 
             EditorGUILayout.EndHorizontal();
@@ -898,9 +922,45 @@ public class UnitySQLManager : EditorWindow
     }
 
 
-    private void DrawPlaceholder()
+    private void DrawStructure()
     {
-        EditorGUILayout.LabelField("Placeholder tab for future features.", EditorStyles.boldLabel);
+        if (string.IsNullOrEmpty(selectedTableForContent))
+        {
+            EditorGUILayout.LabelField("Select a table to view its structure.", EditorStyles.boldLabel);
+            return;
+        }
+
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        if (columns == null || columns.Count == 0)
+        {
+            EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
+                EditorStyles.boldLabel);
+            return;
+        }
+
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+        // Table header
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
+        EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(100));
+        EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
+        EditorGUILayout.EndHorizontal();
+
+        // Table rows
+        foreach (var column in columns)
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            EditorGUILayout.LabelField(column.Name, GUILayout.Width(150));
+            EditorGUILayout.LabelField(column.Type, GUILayout.Width(100));
+            EditorGUILayout.LabelField(column.IsPrimaryKey ? "✅ Yes" : "❌ No", GUILayout.Width(100));
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndScrollView();
     }
 
     private void AddNewConnection()
