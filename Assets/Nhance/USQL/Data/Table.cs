@@ -15,69 +15,81 @@ public class Table
         Name = name;
     }
 
-   public void LoadContent(Database database)
-{
-    Data.Clear();
-
-    using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+    public void ClearTable(Database database)
     {
-        connection.Open();
-
-        using (var command = new SqliteCommand($"SELECT * FROM {Name};", connection))
-        using (var reader = command.ExecuteReader())
+        using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
         {
-            while (reader.Read())
+            connection.Open();
+
+            using (var command = new SqliteCommand($"DELETE FROM {Name};", connection))
+                command.ExecuteReader();
+        }
+    }
+
+    public void LoadContent(Database database)
+    {
+        Data.Clear();
+
+        using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+        {
+            connection.Open();
+
+            using (var command = new SqliteCommand($"SELECT * FROM {Name};", connection))
+            using (var reader = command.ExecuteReader())
             {
-                var row = new Dictionary<string, object>();
-
-                for (int i = 0; i < reader.FieldCount; i++)
+                while (reader.Read())
                 {
-                    string columnName = reader.GetName(i);
-                    object value = reader.GetValue(i);
+                    var row = new Dictionary<string, object>();
 
-                    if (value is DBNull) value = null;
-
-                    string columnType = database.GetColumnType(Name, columnName);
-
-                    try
+                    for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        // **Retrieve GameObject from Asset Path**
-                        if (columnType == "GameObject" && value is string assetPath)
+                        string columnName = reader.GetName(i);
+                        object value = reader.GetValue(i);
+
+                        if (value is DBNull) value = null;
+
+                        string columnType = database.GetColumnType(Name, columnName);
+
+                        try
                         {
-                            row[columnName] = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+                            // **Retrieve GameObject from Asset Path**
+                            if (columnType == "GameObject" && value is string assetPath)
+                            {
+                                row[columnName] = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+                            }
+                            // **Retrieve Sprite from Asset Path**
+                            else if (columnType == "Sprite" && value is string spritePath)
+                            {
+                                row[columnName] = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+                            }
+                            // **Parse Vector2**
+                            else if (columnType == "Vector2" && value is string vector2Str)
+                            {
+                                row[columnName] = ParseVector2(vector2Str);
+                            }
+                            // **Parse Vector3**
+                            else if (columnType == "Vector3" && value is string vector3Str)
+                            {
+                                row[columnName] = ParseVector3(vector3Str);
+                            }
+                            else
+                            {
+                                row[columnName] = value;
+                            }
                         }
-                        // **Retrieve Sprite from Asset Path**
-                        else if (columnType == "Sprite" && value is string spritePath)
+                        catch (Exception e)
                         {
-                            row[columnName] = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
-                        }
-                        // **Parse Vector2**
-                        else if (columnType == "Vector2" && value is string vector2Str)
-                        {
-                            row[columnName] = ParseVector2(vector2Str);
-                        }
-                        // **Parse Vector3**
-                        else if (columnType == "Vector3" && value is string vector3Str)
-                        {
-                            row[columnName] = ParseVector3(vector3Str);
-                        }
-                        else
-                        {
-                            row[columnName] = value;
+                            Debug.LogError(
+                                $"[ERROR] Failed to parse column '{columnName}' in table '{Name}': {e.Message}");
+                            row[columnName] = value; // Keep raw value to prevent crashes
                         }
                     }
-                    catch (Exception e)
-                    {
-                        Debug.LogError($"[ERROR] Failed to parse column '{columnName}' in table '{Name}': {e.Message}");
-                        row[columnName] = value; // Keep raw value to prevent crashes
-                    }
+
+                    Data.Add(row);
                 }
-
-                Data.Add(row);
             }
         }
     }
-}
 
 
     private Vector2 ParseVector2(string value)
@@ -94,6 +106,7 @@ public class Table
         {
             Debug.LogError($"[ERROR] Failed to parse Vector2: '{value}' - {e.Message}");
         }
+
         return Vector2.zero; // Return default instead of breaking the table
     }
 
@@ -103,7 +116,8 @@ public class Table
         try
         {
             string[] parts = value.Split(',');
-            if (parts.Length == 3 && float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y) && float.TryParse(parts[2], out float z))
+            if (parts.Length == 3 && float.TryParse(parts[0], out float x) && float.TryParse(parts[1], out float y) &&
+                float.TryParse(parts[2], out float z))
             {
                 return new Vector3(x, y, z);
             }
@@ -112,9 +126,9 @@ public class Table
         {
             Debug.LogError($"[ERROR] Failed to parse Vector3: '{value}' - {e.Message}");
         }
+
         return Vector3.zero; // Return default instead of breaking the table
     }
-
 
 
     public void InsertData(Dictionary<string, object> rowData, string databasePath)

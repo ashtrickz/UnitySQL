@@ -24,6 +24,9 @@ public class UnitySQLManager : EditorWindow
     private string[] availableColumnTypes = {"TEXT", "INTEGER", "REAL", "BLOB"}; // Available column types
     private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
 
+    private int currentPage = 0;
+    private const int rowsPerPage = 5;
+    
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
 
@@ -606,7 +609,12 @@ public class UnitySQLManager : EditorWindow
         if (table == null) return;
 
         string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(300));
+        int totalRows = table.Data.Count;
+        int totalPages = Mathf.CeilToInt((float)totalRows / rowsPerPage);
+        currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
+
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
+
 
         if (table.Data.Count > 0)
         {
@@ -635,8 +643,11 @@ public class UnitySQLManager : EditorWindow
             EditorGUILayout.EndHorizontal();
 
             // **Table Rows**
-            foreach (var row in table.Data)
+            // Paginated Table Rows
+            for (int i = currentPage * rowsPerPage; i < Mathf.Min((currentPage + 1) * rowsPerPage, totalRows); i++)
             {
+                var row = table.Data[i];
+
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
                 foreach (var column in row.Keys)
@@ -699,6 +710,25 @@ public class UnitySQLManager : EditorWindow
             if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
         }
 
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+
+        if (GUILayout.Button("◀", GUILayout.Width(25)) && currentPage > 0)
+        {
+            currentPage--;
+        }
+        
+        EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel, GUILayout.Width(100));
+
+        if (GUILayout.Button("▶", GUILayout.Width(25)) && currentPage < totalPages - 1)
+        {
+            currentPage++;
+        }
+
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+
+        
         EditorGUILayout.EndScrollView();
     }
 
@@ -747,7 +777,7 @@ public class UnitySQLManager : EditorWindow
     private string ConvertValueToString(object value)
     {
         if (value == null)
-            return ""; // Now shows an empty field instead of "NULL"
+            return "";
 
         if (value is Vector2 vector2)
             return $"{vector2.x}, {vector2.y}";
@@ -1301,11 +1331,7 @@ public class UnitySQLManager : EditorWindow
                         "Yes", "No"))
                 {
                     var table = database.Tables.First(t => t.Name == tableName);
-
-                    foreach (var data in table.Data)
-                    {
-                        data.Clear();
-                    }
+                    table.ClearTable(database);
                 }
 
                 break;
