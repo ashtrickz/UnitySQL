@@ -21,12 +21,15 @@ public class UnitySQLManager : EditorWindow
     private string newColumnName = "";
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
-    private string[] availableColumnTypes = {"TEXT", "INTEGER", "REAL", "BLOB"}; // Available column types
+
+    private string[] availableColumnTypes =
+        {"TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"}; // Available column types
+
     private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
 
     private int currentPage = 0;
     private const int rowsPerPage = 5;
-    
+
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
 
@@ -345,7 +348,7 @@ public class UnitySQLManager : EditorWindow
         {
             case 0:
                 if (!string.IsNullOrEmpty(selectedTableForContent))
-                    DrawDatabaseStructure();
+                    DrawDatabaseOverview();
                 else
                     DrawDatabaseTables();
                 break;
@@ -474,7 +477,7 @@ public class UnitySQLManager : EditorWindow
     }
 
 
-    private void DrawDatabaseStructure()
+    private void DrawDatabaseOverview()
     {
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
@@ -610,7 +613,7 @@ public class UnitySQLManager : EditorWindow
 
         string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
         int totalRows = table.Data.Count;
-        int totalPages = Mathf.CeilToInt((float)totalRows / rowsPerPage);
+        int totalPages = Mathf.CeilToInt((float) totalRows / rowsPerPage);
         currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
 
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
@@ -700,8 +703,8 @@ public class UnitySQLManager : EditorWindow
                     ShowRowContextMenu(selectedTableForContent, row);
                 EditorGUILayout.EndHorizontal();
             }
-
-            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(25)))
+            
+            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(25)))
                 OpenAddRowWindow(selectedTableForContent);
         }
         else
@@ -717,8 +720,9 @@ public class UnitySQLManager : EditorWindow
         {
             currentPage--;
         }
-        
-        EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel, GUILayout.Width(100));
+
+        EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel,
+            GUILayout.Width(100));
 
         if (GUILayout.Button("▶", GUILayout.Width(25)) && currentPage < totalPages - 1)
         {
@@ -728,7 +732,7 @@ public class UnitySQLManager : EditorWindow
         GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
 
-        
+
         EditorGUILayout.EndScrollView();
     }
 
@@ -1105,6 +1109,10 @@ public class UnitySQLManager : EditorWindow
     private List<bool> columnSelections = new List<bool>();
     private bool selectAllColumns = false;
 
+    private List<string> editedColumnNames = new List<string>();
+    private List<int> selectedColumnTypeIndices = new List<int>();
+    private List<bool> editedPrimaryKeys = new List<bool>();
+
     private void DrawStructure()
     {
         if (string.IsNullOrEmpty(selectedTableForContent))
@@ -1124,17 +1132,27 @@ public class UnitySQLManager : EditorWindow
             return;
         }
 
-        // Ensure columnSelections list is the correct size
+        // Initialize storage lists if not set
+        if (editedColumnNames.Count != columns.Count || selectedColumnTypeIndices.Count != columns.Count)
+        {
+            editedColumnNames = columns.Select(col => col.Name).ToList();
+            selectedColumnTypeIndices = columns.Select(col => Array.IndexOf(availableColumnTypes, col.Type)).ToList();
+            editedPrimaryKeys = columns.Select(col => col.IsPrimaryKey).ToList();
+        }
+
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+        // **Save Changes Button**
+        // Ensure selection list is initialized correctly
         if (columnSelections.Count != columns.Count)
         {
             columnSelections = new List<bool>(new bool[columns.Count]);
         }
 
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
-
-        // Bulk Actions Header
+// Bulk Actions Header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
+
         if (GUILayout.Button("Select All", GUILayout.Width(100)))
         {
             for (int i = 0; i < columnSelections.Count; i++)
@@ -1146,27 +1164,24 @@ public class UnitySQLManager : EditorWindow
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("📄 View", GUILayout.Width(80)))
         {
-            PerformBulkAction("View");
-        }
-
-        if (GUILayout.Button("✏️ Edit", GUILayout.Width(80)))
-        {
-            PerformBulkAction("Edit");
+            PerformBulkColumnAction("View");
         }
 
         if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
         {
-            PerformBulkAction("Delete");
+            PerformBulkColumnAction("Delete");
         }
 
-        if (GUILayout.Button("🔑 Primary Key", GUILayout.Width(120)))
+        if (GUILayout.Button("💾 Save Changes", GUILayout.Width(150)))
         {
-            PerformBulkAction("PrimaryKey");
+            SaveColumnChanges(database);
         }
 
+        GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
 
-        // Table header
+        // **Table Header**
+// Table header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         EditorGUILayout.LabelField("✔", GUILayout.Width(20));
         EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
@@ -1174,21 +1189,108 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
         EditorGUILayout.EndHorizontal();
 
-        // Table rows
+// Table rows (with checkboxes)
         for (int i = 0; i < columns.Count; i++)
         {
-            var column = columns[i];
-
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
             columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
-            EditorGUILayout.LabelField(column.Name, GUILayout.Width(150));
-            EditorGUILayout.LabelField(column.Type, GUILayout.Width(100));
-            EditorGUILayout.LabelField(column.IsPrimaryKey ? "✅ Yes" : "❌ No", GUILayout.Width(100));
+            editedColumnNames[i] = EditorGUILayout.TextField(editedColumnNames[i], GUILayout.Width(150));
+            selectedColumnTypeIndices[i] = EditorGUILayout.Popup(selectedColumnTypeIndices[i], availableColumnTypes,
+                GUILayout.Width(100));
+
+            bool wasPrimaryKey = editedPrimaryKeys[i];
+            editedPrimaryKeys[i] = EditorGUILayout.Toggle(editedPrimaryKeys[i], GUILayout.Width(100));
+
+            if (editedPrimaryKeys[i] && !wasPrimaryKey)
+            {
+                for (int j = 0; j < editedPrimaryKeys.Count; j++)
+                {
+                    if (j != i) editedPrimaryKeys[j] = false;
+                }
+            }
+
+            if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+            {
+                PerformBulkAction("View", columns[i].Name);
+            }
+            
+            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            {
+                PerformBulkAction("Delete", columns[i].Name);
+            }
+
             EditorGUILayout.EndHorizontal();
         }
 
+        EditorGUILayout.BeginHorizontal();
+        if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
+        {
+            OpenAddColumnWindow(selectedTableForContent);
+        }
+        EditorGUILayout.EndHorizontal();
         EditorGUILayout.EndScrollView();
     }
+
+    private void PerformBulkColumnAction(string action)
+    {
+        var connection = connections[selectedConnectionIndex];
+        var database = connection.Databases[selectedDatabaseIndex];
+
+        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        List<string> selectedColumns = new List<string>();
+
+        for (int i = 0; i < columns.Count; i++)
+        {
+            if (columnSelections[i])
+            {
+                selectedColumns.Add(columns[i].Name);
+            }
+        }
+
+        if (selectedColumns.Count == 0) return;
+
+        switch (action)
+        {
+            case "View":
+                selectedTab = 3; // Switch to SQL Tab
+                database.SQLQuery = $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
+                ExecuteSQLQuery(database);
+                break;
+
+            case "Delete":
+                if (EditorUtility.DisplayDialog("Confirm Delete",
+                        $"Are you sure you want to delete {selectedColumns.Count} selected columns?", "Yes", "No"))
+                {
+                    foreach (string columnName in selectedColumns)
+                    {
+                        database.DeleteColumn(selectedTableForContent, columnName);
+                    }
+
+                    database.LoadTableContent(selectedTableForContent);
+                }
+
+                break;
+        }
+    }
+
+
+    private void SaveColumnChanges(Database database)
+    {
+        for (int i = 0; i < editedColumnNames.Count; i++)
+        {
+            string newColumnName = editedColumnNames[i];
+            string newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
+            bool isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
+
+            // Apply Changes to the Database
+            database.ModifyColumn(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+        }
+
+        database.LoadTableContent(selectedTableForContent);
+        Debug.Log("Changes saved successfully!");
+    }
+
 
     private void AddNewConnection()
     {
@@ -1343,51 +1445,29 @@ public class UnitySQLManager : EditorWindow
     }
 
 
-    private void PerformBulkAction(string action)
+    private void PerformBulkAction(string action, string columnName)
     {
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
-        for (int i = 0; i < columns.Count; i++)
+        switch (action)
         {
-            if (columnSelections[i])
-            {
-                string columnName = columns[i].Name;
+            case "View":
+                selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery =
+                        $"SELECT {columnName} FROM {selectedTableForContent};";
+                    ExecuteSQLQuery(database);
+                break;
 
-                switch (action)
-                {
-                    case "View":
-                        selectedTab = 3; // Switch to SQL Tab
-
-                        // Get selected columns
-                        List<string> selectedColumns = new List<string>();
-                        foreach (var col in columns.Where((col, index) => columnSelections[index]))
-                        {
-                            selectedColumns.Add(col.Name);
-                        }
-
-                        if (selectedColumns.Count > 0)
-                        {
-                            // Construct the SELECT query
-                            database.SQLQuery =
-                                $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
-                            ExecuteSQLQuery(database);
-                        }
-
-                        break;
-
-                    case "Edit":
-                        OpenChangeColumnWindow(selectedTableForContent, columnName);
-                        break;
-                    case "Delete":
-                        OpenDeleteColumnWindow(selectedTableForContent, columnName);
-                        break;
-                    case "PrimaryKey":
-                        database.MakePrimaryKey(selectedTableForContent, columnName);
-                        break;
-                }
-            }
+            case "Edit":
+                OpenChangeColumnWindow(selectedTableForContent, columnName);
+                break;
+            case "Delete":
+                OpenDeleteColumnWindow(selectedTableForContent, columnName);
+                break;
+            case "PrimaryKey":
+                database.MakePrimaryKey(selectedTableForContent, columnName);
+                break;
         }
     }
 }

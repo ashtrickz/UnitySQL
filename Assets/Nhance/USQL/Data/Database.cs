@@ -103,6 +103,21 @@ public class Database
         LoadTables(); // Refresh table list
     }
 
+    public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+            using (var command = connection.CreateCommand())
+            {
+                // SQLite does not support ALTER COLUMN directly, so we must recreate the table
+                command.CommandText = $"ALTER TABLE {tableName} RENAME COLUMN {GetColumnNames(tableName)[columnIndex]} TO {newName};";
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
+    
     public void LoadTables()
     {
         Tables.Clear();
@@ -851,4 +866,19 @@ public class Database
         public string Type;
         public bool IsPrimaryKey;
     }
+
+    public void DeleteColumn(string tableName, string columnName)
+    {
+        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        {
+            connection.Open();
+            using (var command = connection.CreateCommand())
+            {
+                // SQLite does not support direct column deletion, so we need to recreate the table
+                command.CommandText = $"ALTER TABLE {tableName} DROP COLUMN {columnName};";
+                command.ExecuteNonQuery();
+            }
+        }
+    }
+
 }
