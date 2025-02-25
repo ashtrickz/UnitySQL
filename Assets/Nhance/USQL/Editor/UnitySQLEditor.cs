@@ -385,10 +385,18 @@ public class UnitySQLManager : EditorWindow
                 EditorStyles.boldLabel);
             return;
         }
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+        
+        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         EditorGUILayout.LabelField($"Search in table: {selectedTableForContent}", EditorStyles.boldLabel);
-
+        GUILayout.FlexibleSpace();
+        // Search Button
+        if (GUILayout.Button("🔍 Search", GUILayout.Height(20)))
+        {
+            ExecuteSearchQuery(database);
+        }
+        EditorGUILayout.EndHorizontal();
+        
+        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
         // Table Header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
@@ -424,13 +432,7 @@ public class UnitySQLManager : EditorWindow
 
             EditorGUILayout.EndHorizontal();
         }
-
-        // Search Button
-        if (GUILayout.Button("🔍 Search", GUILayout.Height(30)))
-        {
-            ExecuteSearchQuery(database);
-        }
-
+        
         EditorGUILayout.EndScrollView();
 
         // Display search results
