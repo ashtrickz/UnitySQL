@@ -17,13 +17,11 @@ public class Table
 
     public void ClearTable(Database database)
     {
-        using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
-        {
-            connection.Open();
+        using var connection = new SqliteConnection($"Data Source={database.Path};Version=3;");
+        connection.Open();
 
-            using (var command = new SqliteCommand($"DELETE FROM {Name};", connection))
-                command.ExecuteReader();
-        }
+        using var command = new SqliteCommand($"DELETE FROM {Name};", connection);
+        command.ExecuteNonQuery();
     }
 
     public void LoadContent(Database database)
