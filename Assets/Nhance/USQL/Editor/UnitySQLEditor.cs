@@ -44,6 +44,8 @@ public class UnitySQLManager : EditorWindow
     private string sqlExecutionMessage = "";
     private Vector2 sqlScrollPosition;
 
+    private string searchQuery = "";
+    
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
@@ -195,15 +197,35 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.BeginVertical(GUILayout.Width(200));
         EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
 
+        // Search bar
+        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+        searchQuery = EditorGUILayout.TextField(searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
+        if (GUILayout.Button("X", EditorStyles.toolbarButton, GUILayout.Width(20)))
+        {
+            searchQuery = ""; // Clear search
+        }
+        EditorGUILayout.EndHorizontal();
+
         GUIStyle containerStyle = new GUIStyle("box")
         {
             padding = new RectOffset(5, 5, 5, 5),
             margin = new RectOffset(5, 5, 5, 5)
         };
 
-        for (int i = 0; i < connections.Count; i++)
+        for (var i = 0; i < connections.Count; i++)
         {
             var connection = connections[i];
+            bool connectionMatches = string.IsNullOrEmpty(searchQuery) ||
+                                     connection.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0;
+
+            bool anyDatabaseMatches = connection.Databases.Any(db =>
+                string.IsNullOrEmpty(searchQuery) ||
+                db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                db.Tables.Any(table => table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)
+            );
+
+            if (!connectionMatches && !anyDatabaseMatches) continue; // Skip if nothing matches
+
 
             if (!connectionStates.ContainsKey(connection))
             {
@@ -238,7 +260,11 @@ public class UnitySQLManager : EditorWindow
 
             if (isConnectionExpanded)
             {
-                foreach (var database in connection.Databases)
+                foreach (var database in connection.Databases.Where(db =>
+                             string.IsNullOrEmpty(searchQuery) || 
+                             db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             db.Tables.Any(table => table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)))
+
                 {
                     if (!databaseStates.ContainsKey(database))
                     {
@@ -290,7 +316,10 @@ public class UnitySQLManager : EditorWindow
 
                     if (isDatabaseExpanded)
                     {
-                        foreach (var table in database.Tables)
+                        foreach (var table in database.Tables.Where(table =>
+                                     string.IsNullOrEmpty(searchQuery) || 
+                                     table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
+
                         {
                             EditorGUILayout.BeginHorizontal();
                             GUILayout.Space(30);
