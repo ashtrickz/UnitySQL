@@ -6,6 +6,7 @@ using System.Data;
 using System.Data.Sql;
 using System.Linq;
 using Mono.Data.Sqlite;
+using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
 public class UnitySQLManager : EditorWindow
@@ -206,12 +207,20 @@ public class UnitySQLManager : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
-        GUIStyle containerStyle = new GUIStyle("box")
+        var consoleBackground = MakeBackgroundTexture(new Color(.1f, .1f, .1f, 1));
+
+        var containerStyle = new GUIStyle("box")
         {
             padding = new RectOffset(5, 5, 5, 5),
-            margin = new RectOffset(5, 5, 5, 5)
-        };
-
+            margin = new RectOffset(5, 5, 5, 5),
+            fontStyle = FontStyle.Normal,
+            normal = 
+            {
+                background = consoleBackground,
+                textColor = Color.white
+            }
+        }; 
+        
         for (var i = 0; i < connections.Count; i++)
         {
             var connection = connections[i];
@@ -232,26 +241,27 @@ public class UnitySQLManager : EditorWindow
                 connectionStates[connection] = false;
             }
 
-            EditorGUILayout.BeginVertical(containerStyle);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            GUILayout.Space(5);
             EditorGUILayout.BeginHorizontal();
 
             bool isConnectionExpanded = connectionStates[connection];
             string connectionArrow = isConnectionExpanded ? "▼" : "▶";
 
-            if (GUILayout.Button($" {connectionArrow}\t {connection.Name} connection", EditorStyles.boldLabel))
+            if (GUILayout.Button($" {connectionArrow} {connection.Name} connection", EditorStyles.boldLabel))
             {
                 connectionStates[connection] = !isConnectionExpanded;
                 SaveSessionData(); // Save expanded state
             }
 
             // **"+" Button to Add Database**
-            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
+            if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenCreateDatabaseWindow(connection);
             }
 
             // **"X" Button to Remove Connection**
-            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
+            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenDeleteConnectionWindow(connection);
             }
@@ -288,7 +298,7 @@ public class UnitySQLManager : EditorWindow
                         SaveSessionData();
                     }
 
-                    if (GUILayout.Button($"\t{database.Name}", EditorStyles.boldLabel,
+                    if (GUILayout.Button($" {database.Name}", EditorStyles.boldLabel,
                             GUILayout.ExpandWidth(true)))
                     {
                         selectedTab = 0;
@@ -301,13 +311,13 @@ public class UnitySQLManager : EditorWindow
                     // EditorGUILayout.EndVertical();
 
                     // **"+" Button to Add Table**
-                    if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
+                    if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
                     {
                         OpenCreateTableWindow(database);
                     }
 
                     // **"X" Button to Remove Database**
-                    if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
+                    if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
                     {
                         OpenDeleteDatabaseWindow(connection, database);
                     }
@@ -321,10 +331,15 @@ public class UnitySQLManager : EditorWindow
                                      table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
 
                         {
+                            EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel, GUILayout.Height(2));
+                            GUILayout.Space(15);
+                            GUILayout.Button("", GUILayout.ExpandWidth(true), GUILayout.Height(2));
+                            EditorGUILayout.EndHorizontal();
+                            
                             EditorGUILayout.BeginHorizontal();
                             GUILayout.Space(30);
 
-                            if (GUILayout.Button($" -\t {table.Name}", EditorStyles.boldLabel))
+                            if (GUILayout.Button($" • {table.Name}", EditorStyles.boldLabel))
                             {
                                 selectedTab = 0;
                                 selectedTableForContent = table.Name;
@@ -333,7 +348,7 @@ public class UnitySQLManager : EditorWindow
                             }
 
                             // **"X" Button to Remove Table**
-                            if (GUILayout.Button("❌", GUILayout.Width(25), GUILayout.Height(20)))
+                            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
                             {
                                 OpenDeleteTableWindow(database, table.Name);
                             }
@@ -351,15 +366,29 @@ public class UnitySQLManager : EditorWindow
 
         EditorGUILayout.Space();
 
-        if (GUILayout.Button("Add Connection"))
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("Add Connection", GUILayout.Width(150), GUILayout.Height(25)))
         {
             AddNewConnection();
         }
-
+        
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+        
         EditorGUILayout.EndVertical();
     }
 
 
+    private Texture2D MakeBackgroundTexture(Color color)
+    {
+        var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false); 
+        backgroundTexture.SetPixel(0, 0, color);
+        backgroundTexture.Apply();
+
+        return backgroundTexture;
+    }
+    
     private void DrawRightPanel()
     {
         EditorGUILayout.BeginVertical(style: "box");
@@ -371,7 +400,33 @@ public class UnitySQLManager : EditorWindow
             return;
         }
 
-        selectedTab = GUILayout.Toolbar(selectedTab, tabs);
+        selectedTab = GUILayout.Toolbar(selectedTab, tabs, GUILayout.Height(0), GUILayout.Width(0));
+
+        EditorGUILayout.BeginHorizontal();
+        for (var index = 0; index < tabs.Length; index++)
+        {
+            var tab = tabs[index];
+            var backColor = GUI.backgroundColor;
+            var style = new GUIStyle(GUI.skin.button)
+            {
+                fontStyle = FontStyle.Bold,
+                normal =
+                {
+                    textColor = Color.white
+                }
+            };
+            
+            if (selectedTab == index) GUI.backgroundColor = Color.cyan;
+            
+            if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
+                selectedTab = index;
+
+            GUI.backgroundColor =  backColor;
+            
+            if (index == tabs.Length - 1) continue;
+            GUILayout.Space(10);
+        }
+        EditorGUILayout.EndHorizontal();
 
         switch (selectedTab)
         {
@@ -533,44 +588,52 @@ public class UnitySQLManager : EditorWindow
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
         // Bulk Actions Header
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+        EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel);
         selectAllTables = EditorGUILayout.Toggle(selectAllTables, GUILayout.Width(20));
 
-        if (GUILayout.Button("Select All", GUILayout.Width(100)))
+        var headerStyle = EditorStyles.toolbarButton;
+        headerStyle.normal.textColor = Color.white;
+        
+        if (GUILayout.Button("Select All", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
         {
             for (int i = 0; i < tableSelections.Count; i++)
             {
                 tableSelections[i] = selectAllTables;
             }
         }
-
+        
         GUILayout.FlexibleSpace();
-        if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+        if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("View");
         }
 
-        if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
+        headerStyle.normal.textColor = new Color(184, 0, 231, 1);
+        if (GUILayout.Button("🏗️ Structure", headerStyle,GUILayout.Width(100), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Structure");
         }
 
-        if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
+        headerStyle.normal.textColor = Color.cyan;
+        if (GUILayout.Button("🔍 Search", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Search");
         }
 
-        if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
+        headerStyle.normal.textColor = Color.green;
+        if (GUILayout.Button("➕ Insert", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Insert");
         }
 
-        if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+        headerStyle.normal.textColor = Color.yellow;
+        if (GUILayout.Button("🗑️ Clear", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Clear");
         }
 
-        if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+        headerStyle.normal.textColor = Color.red;
+        if (GUILayout.Button("❌ Delete", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Delete");
         }
@@ -592,37 +655,56 @@ public class UnitySQLManager : EditorWindow
                 SaveSessionData();
             }
 
+            var style = EditorStyles.toolbarButton;
+            style.normal.textColor = Color.white;
+            
             // Action Buttons for Each Table
-            if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+            if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "View");
             }
 
-            if (GUILayout.Button("🏗️ Structure", GUILayout.Width(100)))
+            GUILayout.Space(5);
+            style.normal.textColor = new Color(184, 0, 231, 1);
+            
+            if (GUILayout.Button("🏗️ Structure", style, GUILayout.Width(100)))
             {
                 ExecuteTableAction(table, "Structure");
             }
 
-            if (GUILayout.Button("🔍 Search", GUILayout.Width(80)))
+            GUILayout.Space(5);
+            style.normal.textColor = Color.cyan;
+            
+            if (GUILayout.Button("🔍 Search", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Search");
             }
+            
+            GUILayout.Space(5);
+            style.normal.textColor = Color.green;
 
-            if (GUILayout.Button("➕ Insert", GUILayout.Width(80)))
+            if (GUILayout.Button("➕ Insert", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Insert");
             }
+            
+            GUILayout.Space(5);
+            style.normal.textColor = Color.yellow;
 
-            if (GUILayout.Button("🗑️ Clear", GUILayout.Width(80)))
+            if (GUILayout.Button("🗑️ Clear", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Clear");
             }
+            
+            GUILayout.Space(5);
+            style.normal.textColor = Color.red;
 
-            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Delete");
             }
 
+            // GUI.backgroundColor = color;
             EditorGUILayout.EndHorizontal();
         }
 
@@ -648,8 +730,7 @@ public class UnitySQLManager : EditorWindow
         currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
 
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
-
-
+        
         if (table.Data.Count > 0)
         {
             // **Column Headers with Right-Click Menu**
@@ -672,7 +753,7 @@ public class UnitySQLManager : EditorWindow
                 }
             }
 
-            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(25)))
+            if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
                 OpenAddColumnWindow(selectedTableForContent);
             EditorGUILayout.EndHorizontal();
 
@@ -681,15 +762,18 @@ public class UnitySQLManager : EditorWindow
             for (int i = currentPage * rowsPerPage; i < Mathf.Min((currentPage + 1) * rowsPerPage, totalRows); i++)
             {
                 var row = table.Data[i];
-
+                
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
                 foreach (var column in row.Keys)
                 {
                     object value = row[column];
 
+                    var cellStyle = EditorStyles.boldLabel;
+                    cellStyle.alignment = TextAnchor.MiddleCenter;
+                    cellStyle.fontStyle = FontStyle.Normal;
                     Rect cellRect = GUILayoutUtility.GetRect(120, 25);
-                    GUI.Box(cellRect, "", EditorStyles.helpBox);
+                    GUI.Box(cellRect, "", cellStyle);
 
                     // **Right-Click Context Menu for Cells**
                     if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
@@ -716,11 +800,11 @@ public class UnitySQLManager : EditorWindow
                     // **Standard Label for Text/Numeric Values**
                     else if (columnType == "Vector2" && value is Vector2 vector2)
                     {
-                        GUI.Label(cellRect, $"Vector2({vector2.x}, {vector2.y})", EditorStyles.label);
+                        GUI.Label(cellRect, $"Vector2({vector2.x}, {vector2.y})", cellStyle);
                     }
                     else if (columnType == "Vector3" && value is Vector3 vector3)
                     {
-                        GUI.Label(cellRect, $"Vector3({vector3.x}, {vector3.y}, {vector3.z})", EditorStyles.label);
+                        GUI.Label(cellRect, $"Vector3({vector3.x}, {vector3.y}, {vector3.z})", cellStyle);
                     }
                     else
                     {
@@ -728,14 +812,18 @@ public class UnitySQLManager : EditorWindow
                         GUI.Label(cellRect, cellValue,
                             new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter});
                     }
+                    cellStyle.alignment = TextAnchor.MiddleLeft;
                 }
 
                 if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25)))
                     ShowRowContextMenu(selectedTableForContent, row);
                 EditorGUILayout.EndHorizontal();
+                GUILayout.Space(2);
             }
             
-            if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(25)))
+            var style = new GUIStyle(GUI.skin.button);
+            style.normal.textColor = Color.green;
+            if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
                 OpenAddRowWindow(selectedTableForContent);
         }
         else
@@ -747,7 +835,7 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
 
-        if (GUILayout.Button("◀", GUILayout.Width(25)) && currentPage > 0)
+        if (GUILayout.Button("◀", EditorStyles.boldLabel,GUILayout.Width(25)) && currentPage > 0)
         {
             currentPage--;
         }
@@ -755,7 +843,7 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel,
             GUILayout.Width(100));
 
-        if (GUILayout.Button("▶", GUILayout.Width(25)) && currentPage < totalPages - 1)
+        if (GUILayout.Button("▶", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage < totalPages - 1)
         {
             currentPage++;
         }
@@ -1025,11 +1113,17 @@ public class UnitySQLManager : EditorWindow
 
         database.SQLQuery = EditorGUILayout.TextArea(database.SQLQuery, GUILayout.Height(100));
 
-        if (GUILayout.Button("Execute"))
+        GUILayout.Space(5);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("Execute", GUILayout.Width(200), GUILayout.Height(25)))
         {
             ExecuteSQLQuery(database);
         }
-
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+        GUILayout.Space(5);
+        
         // Display execution messages (errors or success)
         if (!string.IsNullOrEmpty(sqlExecutionMessage))
         {
@@ -1113,9 +1207,12 @@ public class UnitySQLManager : EditorWindow
         if (columnNames.Length > 0)
         {
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            var colStyle = new GUIStyle(EditorStyles.boldLabel);
+            colStyle.fontSize = 14;
+            // colStyle.alignment = TextAnchor.MiddleCenter;
             foreach (string col in columnNames)
             {
-                GUILayout.Label(col, EditorStyles.boldLabel, GUILayout.Width(150));
+                GUILayout.Label(col, colStyle, GUILayout.Width(150), GUILayout.Height(25));
             }
 
             EditorGUILayout.EndHorizontal();
@@ -1184,26 +1281,30 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
 
-        if (GUILayout.Button("Select All", GUILayout.Width(100)))
+        var style = EditorStyles.toolbarButton;
+        style.normal.textColor = Color.white;
+        
+        if (GUILayout.Button("Select All", style, GUILayout.Width(100)))
         {
             for (int i = 0; i < columnSelections.Count; i++)
             {
                 columnSelections[i] = selectAllColumns;
             }
         }
-
+        
         GUILayout.FlexibleSpace();
-        if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+        if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
         {
             PerformBulkColumnAction("View");
         }
-
-        if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+        style.normal.textColor = Color.red;
+        if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
         {
             PerformBulkColumnAction("Delete");
         }
 
-        if (GUILayout.Button("💾 Save Changes", GUILayout.Width(150)))
+        style.normal.textColor = Color.white;
+        if (GUILayout.Button("💾 Save Changes", style, GUILayout.Width(150)))
         {
             SaveColumnChanges(database);
         }
@@ -1241,12 +1342,14 @@ public class UnitySQLManager : EditorWindow
                 }
             }
 
-            if (GUILayout.Button("📄 View", GUILayout.Width(80)))
+            style.normal.textColor = Color.white;
+            if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
             {
                 PerformBulkAction("View", columns[i].Name);
             }
             
-            if (GUILayout.Button("❌ Delete", GUILayout.Width(80)))
+            style.normal.textColor = Color.red;
+            if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
             {
                 PerformBulkAction("Delete", columns[i].Name);
             }
@@ -1255,7 +1358,8 @@ public class UnitySQLManager : EditorWindow
         }
 
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("➕", GUILayout.Width(25), GUILayout.Height(20)))
+        style.normal.textColor = Color.green;
+        if (GUILayout.Button("➕", style, GUILayout.Width(25), GUILayout.Height(20)))
         {
             OpenAddColumnWindow(selectedTableForContent);
         }
