@@ -1475,7 +1475,7 @@ public class UnitySQLManager : EditorWindow
 
     private List<SearchFilter> searchFilters = new List<SearchFilter>();
 
-    private class SearchFilter
+    public class SearchFilter
     {
         public string Column;
         public string Operator;
@@ -1506,7 +1506,7 @@ public class UnitySQLManager : EditorWindow
         {
             return database.CheckPrimaryKeyExists(tableName, primaryKeyColumn, keyValue);
         }
-
+        
         return false;
     }
 
