@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GridDrawlerUI : MonoBehaviour
+public class GridDrawerUI : MonoBehaviour
 {
     [SerializeField] private Transform gridTransform;
     

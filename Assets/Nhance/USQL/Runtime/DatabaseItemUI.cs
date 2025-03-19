@@ -9,7 +9,7 @@ public class DatabaseItemUI : MonoBehaviour
     
     [SerializeField] private Transform tableItemTemplate;
 
-    public void Initialize(Database database, GridDrawlerUI gridDrawlerUI)
+    public void Initialize(Database database, GridDrawerUI gridDrawerUI)
     {
         databaseNameText.text = database.Name;
         
@@ -17,7 +17,7 @@ public class DatabaseItemUI : MonoBehaviour
         {
             var tableItemTransform = Instantiate(tableItemTemplate, tablesLayoutGroup);
             tableItemTransform.TryGetComponent<TableItemUI>(out var tableItem);
-            tableItem.Initialize(database, table, gridDrawlerUI);
+            tableItem.Initialize(database, table, gridDrawerUI);
         });
         
         tablesLayoutGroup.gameObject.SetActive(false);

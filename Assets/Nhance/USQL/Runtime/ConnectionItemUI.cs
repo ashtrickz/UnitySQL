@@ -9,7 +9,7 @@ public class ConnectionItemUI : MonoBehaviour
     
     [SerializeField] private Transform databaseItemTemplate;
 
-    public void Initialize(DatabaseConnection databaseConnection, GridDrawlerUI gridDrawlerUI)
+    public void Initialize(DatabaseConnection databaseConnection, GridDrawerUI gridDrawerUI)
     {
         connectionNameText.text = databaseConnection.Name;
         
@@ -17,7 +17,7 @@ public class ConnectionItemUI : MonoBehaviour
         {
             var databaseItemTransform = Instantiate(databaseItemTemplate, databaseLayoutGroup);
             databaseItemTransform.TryGetComponent<DatabaseItemUI>(out var databaseItem);
-            databaseItem.Initialize(database, gridDrawlerUI);
+            databaseItem.Initialize(database, gridDrawerUI);
         });
         
         databaseLayoutGroup.gameObject.SetActive(false);

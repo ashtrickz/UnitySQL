@@ -8,11 +8,11 @@ public class TableItemUI : MonoBehaviour
 
     private Database database;
     private Table table;
-    private GridDrawlerUI gridDrawlerUI;
-    public void Initialize(Database database, Table table, GridDrawlerUI gridDrawlerUI)
+    private GridDrawerUI gridDrawerUI;
+    public void Initialize(Database database, Table table, GridDrawerUI gridDrawerUI)
     {
         tableNameText.text = table.Name;
-        this.gridDrawlerUI = gridDrawlerUI;
+        this.gridDrawerUI = gridDrawerUI;
         this.database = database;
         this.table = table;
         
@@ -22,6 +22,6 @@ public class TableItemUI : MonoBehaviour
     public void DrawTableOverview()
     {
         SQLQueryHandler.ExecuteSearchQuery(database, table.Name, new(), out var result);
-        gridDrawlerUI.Draw(database.GetPrimaryKeyColumn(table.Name), result);
+        gridDrawerUI.Draw(database.GetPrimaryKeyColumn(table.Name), result);
     }
 }

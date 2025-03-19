@@ -1,13 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class UnitySQLRuntime : MonoBehaviour
 {
-    private const string DATABASE_FILE_PATH = "S:\\GitHub\\UnitySQL\\Assets\\Nhance\\USQL\\Connections\\data.sqlite";
+    private const string DATABASE_FILE_PATH = "Assets/Nhance/USQL/Connections/data.sqlite";
     
     [Header("References")]
     
-    [SerializeField] private GridDrawlerUI gridDrawlerUI;
+    [SerializeField] private GridDrawerUI gridDrawerUI;
     
     [SerializeField] private Transform connectionsLayoutGroup;
     
@@ -24,7 +25,7 @@ public class UnitySQLRuntime : MonoBehaviour
         {
             var connectionItemTransform = Instantiate(connectionItemTemplate, connectionsLayoutGroup);
             connectionItemTransform.TryGetComponent<ConnectionItemUI>(out var connectionItem);
-            connectionItem.Initialize(connection, gridDrawlerUI);
+            connectionItem.Initialize(connection, gridDrawerUI);
         });
     }
 
@@ -32,6 +33,6 @@ public class UnitySQLRuntime : MonoBehaviour
     public void TestSelect()
     {
         SQLQueryHandler.ExecuteSearchQuery(connections[0].Databases[0], "testTable", new(), out var result);
-        gridDrawlerUI.Draw(connections[0].Databases[0].GetPrimaryKeyColumn("testTable"), result);
+        gridDrawerUI.Draw(connections[0].Databases[0].GetPrimaryKeyColumn("testTable"), result);
     }
 }
