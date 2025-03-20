@@ -43,6 +43,39 @@ public static class SQLQueryHandler
         result = (tempResult.Item1, tempResult.Item2);
     }
     
+    public static (string[], List<string[]>) ExecuteSQLQuery(Database database)
+    {
+        (string[], List<string[]>) tempResult = new();
+        try
+        {
+            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            {
+                connection.Open();
+                using (var dbCommand = connection.CreateCommand())
+                {
+                    dbCommand.CommandText = database.SQLQuery;
+
+                    if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                    {
+                        tempResult = ReadTableResults(dbCommand);
+                    }
+                    else
+                    {
+                        int affectedRows = dbCommand.ExecuteNonQuery();
+                        Debug.Log($"Query executed successfully. Affected rows: {affectedRows}");
+                    }
+                }
+            }
+
+            //DrawConnectionsPanel();
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError("Error: " + ex.Message);
+        }
+        return (tempResult.Item1, tempResult.Item2);
+    }
+    
     private static (string[], List<string[]>) ReadTableResults(IDbCommand dbCommand)
     {
         using (IDataReader reader = dbCommand.ExecuteReader())

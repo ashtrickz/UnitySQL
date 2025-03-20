@@ -1,3 +1,5 @@
+using System;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,6 +11,9 @@ public class TableItemUI : MonoBehaviour
     private Database database;
     private Table table;
     private GridDrawerUI gridDrawerUI;
+
+    public Action<Database> OnTableChose;
+    
     public void Initialize(Database database, Table table, GridDrawerUI gridDrawerUI)
     {
         tableNameText.text = table.Name;
@@ -23,5 +28,6 @@ public class TableItemUI : MonoBehaviour
     {
         SQLQueryHandler.ExecuteSearchQuery(database, table.Name, new(), out var result);
         gridDrawerUI.Draw(database.GetPrimaryKeyColumn(table.Name), result);
+        OnTableChose.Invoke(database);
     }
 }

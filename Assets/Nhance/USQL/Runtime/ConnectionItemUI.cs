@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,6 +10,9 @@ public class ConnectionItemUI : MonoBehaviour
     
     [SerializeField] private Transform databaseItemTemplate;
 
+    public List<DatabaseItemUI> DatabaseItemUIs => databaseItemsUIs;
+    private List<DatabaseItemUI> databaseItemsUIs = new ();
+
     public void Initialize(DatabaseConnection databaseConnection, GridDrawerUI gridDrawerUI)
     {
         connectionNameText.text = databaseConnection.Name;
@@ -18,6 +22,7 @@ public class ConnectionItemUI : MonoBehaviour
             var databaseItemTransform = Instantiate(databaseItemTemplate, databaseLayoutGroup);
             databaseItemTransform.TryGetComponent<DatabaseItemUI>(out var databaseItem);
             databaseItem.Initialize(database, gridDrawerUI);
+            databaseItemsUIs.Add(databaseItem);
         });
         
         databaseLayoutGroup.gameObject.SetActive(false);

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,6 +9,9 @@ public class DatabaseItemUI : MonoBehaviour
     [SerializeField] private Transform tablesLayoutGroup;
     
     [SerializeField] private Transform tableItemTemplate;
+    
+    public List<TableItemUI> TableItemUIs => tableItemsUIs;
+    private List<TableItemUI> tableItemsUIs = new ();
 
     public void Initialize(Database database, GridDrawerUI gridDrawerUI)
     {
@@ -18,6 +22,7 @@ public class DatabaseItemUI : MonoBehaviour
             var tableItemTransform = Instantiate(tableItemTemplate, tablesLayoutGroup);
             tableItemTransform.TryGetComponent<TableItemUI>(out var tableItem);
             tableItem.Initialize(database, table, gridDrawerUI);
+            tableItemsUIs.Add(tableItem);
         });
         
         tablesLayoutGroup.gameObject.SetActive(false);
