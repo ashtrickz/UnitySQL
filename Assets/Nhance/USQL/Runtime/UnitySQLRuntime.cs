@@ -6,17 +6,27 @@ using UnityEngine.UI;
 
 public class UnitySQLRuntime : MonoBehaviour
 {
-    private const string DATABASE_FILE_PATH = "Assets/Nhance/USQL/Connections/data.sqlite";
+    // private const string DATABASE_FILE_PATH = "Assets/Nhance/USQL/Connections/data.sqlite";
+    
+    [Header("Settings")]
+    
+    [SerializeField] private string databaseFilePath = "Assets/Nhance/USQL/Connections/data.sqlite";
 
     [Header("Tabs")] 
     
     [SerializeField] private List<ButtonPanelPair> tabs = new();
+
+    [Header("References")] 
     
-    [Header("References")]
+    [SerializeField] private Transform tabsContainer;
     
     [SerializeField] private GridDrawerUI overviewGridDrawerUI;
     
     [SerializeField] private SQLQueryExecutorUI sqlQueryExecutorUI;
+    
+    [SerializeField] private SubmitModalUI submitModalUI;
+    
+    [SerializeField] private AddRowModalUI addRowModalUI;
     
     [SerializeField] private Transform connectionsLayoutGroup;
     
@@ -27,10 +37,15 @@ public class UnitySQLRuntime : MonoBehaviour
     public Database Database => database;
     private Database database;
     
+    public Table Table => table;
+    private Table table;
+    
     public Action<Database> OnDatabaseChanged;
     
     private void Start()
     {
+        Connection();
+        
         OnDatabaseChanged = new(database =>
         {
             this.database = database;
@@ -38,6 +53,26 @@ public class UnitySQLRuntime : MonoBehaviour
             tabs[0].panel.gameObject.SetActive(true);
             sqlQueryExecutorUI.OnDatabaseChange.Invoke(database);
         });
+        
+        overviewGridDrawerUI.Initialize(submitModalUI);
+        overviewGridDrawerUI.OnAddRowButtonClicked += () =>
+        {
+            addRowModalUI.gameObject.SetActive(true);
+            addRowModalUI.ShowModal(database, table.Name);
+
+            addRowModalUI.OnAddRow += () =>
+            {
+                SQLQueryHandler.ExecuteSearchQuery(database, table.Name, new(), out var result);
+                overviewGridDrawerUI.Draw(database, table, result);
+            };
+        };
+        
+        submitModalUI.OnSubmit += () =>
+        {
+            SQLQueryHandler.ExecuteSearchQuery(database, table.Name, new(), out var result);
+            overviewGridDrawerUI.Draw(database, table, result);
+        };
+        submitModalUI.gameObject.SetActive(false);
         
         tabs.ForEach(item =>
         {
@@ -49,12 +84,13 @@ public class UnitySQLRuntime : MonoBehaviour
         });
         
         CloseAllTabs();
+        tabsContainer.gameObject.SetActive(false);
+        addRowModalUI.gameObject.SetActive(false);
     }
-
-    [ContextMenu("Test Connection")]
-    public void TestConnection()
+    
+    public void Connection()
     {
-        connections.Add(new DatabaseConnection(DATABASE_FILE_PATH));
+        connections.Add(new DatabaseConnection(databaseFilePath));
         
         connections.ForEach(connection =>
         {
@@ -66,20 +102,15 @@ public class UnitySQLRuntime : MonoBehaviour
             {
                 databaseItem.TableItemUIs.ForEach(tableItem =>
                 {
-                    tableItem.OnTableChose += database =>
+                    tableItem.OnTableChose += (database, table) =>
                     {
+                        this.table = table;
+                        tabsContainer.gameObject.SetActive(true);
                         OnDatabaseChanged?.Invoke(database);
                     };
                 });
             });
         });
-    }
-
-    [ContextMenu("Test Select")]
-    public void TestSelect()
-    {
-        SQLQueryHandler.ExecuteSearchQuery(connections[0].Databases[0], "testTable", new(), out var result);
-        overviewGridDrawerUI.Draw(connections[0].Databases[0].GetPrimaryKeyColumn("testTable"), result);
     }
 
     public void CloseAllTabs()

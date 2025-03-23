@@ -7,6 +7,7 @@ public class GridItemUI : MonoBehaviour
 
     public void Initialize(string stringData)
     {
+        if (string.IsNullOrEmpty(stringData)) return;
         var splitedString = stringData.Split('/');
         text.text = splitedString.Length > 1 ? splitedString[splitedString.Length - 1] : stringData;
     }

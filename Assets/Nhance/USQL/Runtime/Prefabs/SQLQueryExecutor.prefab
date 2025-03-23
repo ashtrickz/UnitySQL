@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 5323254523143020341}
   - component: {fileID: 6743727720784531355}
   - component: {fileID: 2420537585724201997}
-  - component: {fileID: 1974171168415780674}
+  - component: {fileID: 465287101322027550}
   m_Layer: 5
   m_Name: InputField (Legacy)
   m_TagString: Untagged
@@ -168,7 +168,7 @@ MonoBehaviour:
   m_FlexibleWidth: 5
   m_FlexibleHeight: 1
   m_LayoutPriority: 1
---- !u!114 &1974171168415780674
+--- !u!114 &465287101322027550
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -177,10 +177,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 2456047463444620576}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_EffectColor: {r: 0.078431375, g: 0.078431375, b: 0.078431375, a: 1}
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
   m_EffectDistance: {x: 2, y: -2}
   m_UseGraphicAlpha: 1
 --- !u!1 &3664477532018621832
@@ -332,7 +332,7 @@ GameObject:
   - component: {fileID: 5060356375349161771}
   - component: {fileID: 4950633536972517353}
   - component: {fileID: 7938870746510005224}
-  - component: {fileID: 4343029354697790419}
+  - component: {fileID: 2807432045641323957}
   m_Layer: 5
   m_Name: Button (Legacy)
   m_TagString: Untagged
@@ -474,7 +474,7 @@ MonoBehaviour:
   m_FlexibleWidth: -1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
---- !u!114 &4343029354697790419
+--- !u!114 &2807432045641323957
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -483,10 +483,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 4045641972876845078}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_EffectColor: {r: 0.078431375, g: 0.078431375, b: 0.078431375, a: 1}
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
   m_EffectDistance: {x: 2, y: -2}
   m_UseGraphicAlpha: 1
 --- !u!1 &6022545941598714131
@@ -948,11 +948,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8930095033753037414, guid: 1f6e83085c7dce74aa5589636ceda676, type: 3}
       propertyPath: m_Size
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 8930095033753037414, guid: 1f6e83085c7dce74aa5589636ceda676, type: 3}
       propertyPath: m_Value
-      value: 1.0000023
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

@@ -10,10 +10,8 @@ GameObject:
   m_Component:
   - component: {fileID: 6476377305660795133}
   - component: {fileID: 7034329752188415091}
-  - component: {fileID: 2195561079253926140}
   - component: {fileID: 8641199542358965740}
   - component: {fileID: 7836694646487119225}
-  - component: {fileID: 3389965632541590921}
   m_Layer: 5
   m_Name: GridView
   m_TagString: Untagged
@@ -51,36 +49,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 61787801179966245}
   m_CullTransparentMesh: 1
---- !u!114 &2195561079253926140
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 61787801179966245}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Material: {fileID: 0}
-  m_Color: {r: 0.2509804, g: 0.2509804, b: 0.2509804, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
-  m_Type: 1
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
 --- !u!114 &8641199542358965740
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -126,21 +94,8 @@ MonoBehaviour:
   gridTransform: {fileID: 4195673366194615049}
   columnTemplate: {fileID: 6822132056988515405, guid: 0f443c4ad7a9b144cb936425d65ea5ff, type: 3}
   gridItemTemplate: {fileID: 5174309081979579072, guid: 7f5cccb288b11d34bbd603d76cf530fa, type: 3}
---- !u!114 &3389965632541590921
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 61787801179966245}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_EffectColor: {r: 0.078431375, g: 0.078431375, b: 0.078431375, a: 1}
-  m_EffectDistance: {x: 2, y: -2}
-  m_UseGraphicAlpha: 1
+  gridAddRowButtonTemplate: {fileID: 6678995162614599135, guid: 16c14424a56d0df46a54c670704538fa, type: 3}
+  gridDeleteRowButtonTemplate: {fileID: 6678995162614599135, guid: c5d555237f5d79d4ca094ad1335035f8, type: 3}
 --- !u!1 &2184994799922998175
 GameObject:
   m_ObjectHideFlags: 0
@@ -559,7 +514,7 @@ MonoBehaviour:
     m_Top: 10
     m_Bottom: 10
   m_ChildAlignment: 0
-  m_Spacing: 20
+  m_Spacing: 0
   m_ChildForceExpandWidth: 0
   m_ChildForceExpandHeight: 0
   m_ChildControlWidth: 1
