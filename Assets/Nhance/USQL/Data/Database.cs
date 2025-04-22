@@ -2,52 +2,41 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Mono.Data.Sqlite;
+using MySql.Data.MySqlClient;
 using UnityEngine;
 
 public class Database
 {
     public string Name;
-    public string Path;
+    public string ConnectionString;
     public List<Table> Tables;
     public string SQLQuery;
 
-    public Database(string name, string path)
+    public Database(string name, string connectionString)
     {
         Name = name;
-        Path = path;
+        ConnectionString = connectionString + $"Database={name};";
         Tables = new List<Table>();
         RefreshTables();
     }
 
     public List<string> GetTableNames()
     {
-        List<string> tables = new List<string>();
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
-        {
-            connection.Open();
-            using (var command = connection.CreateCommand())
-            {
-                command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';";
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        tables.Add(reader.GetString(0));
-                    }
-                }
-            }
-        }
-        return tables;
+        List<string> tableNames = new List<string>();
+        foreach (var table in Tables)
+            tableNames.Add(table.Name);
+        return tableNames;
     }
 
     
     public void RefreshTables()
     {
         Tables.Clear();
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+
+        using (var connection = new MySqlConnection(ConnectionString))
         {
             connection.Open();
-            using (var command = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table';", connection))
+            using (var command = new MySqlCommand("SHOW TABLES;", connection))
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -65,7 +54,7 @@ public class Database
 
     public void CreateTable(string tableName, List<ColumnDefinition> columns, int primaryKeyIndex)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -105,7 +94,7 @@ public class Database
 
     public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
             using (var command = connection.CreateCommand())
@@ -122,7 +111,7 @@ public class Database
     {
         Tables.Clear();
 
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -170,13 +159,13 @@ public class Database
                 }
             }
 
-            table.InsertData(serializedData, Path);
+            // table.InsertData(serializedData, ConnectionString);
         }
     }
 
     public string GetColumnType(string tableName, string columnName)
 {
-    using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+    using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
     {
         connection.Open();
 
@@ -226,7 +215,7 @@ public class Database
 
     public void AddColumnToTable(string tableName, string columnName, string columnType)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -277,7 +266,7 @@ public class Database
     {
         List<string> columns = new List<string>();
 
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
             using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
@@ -305,7 +294,7 @@ public class Database
 
     public void DuplicateRowInTable(string tableName, Dictionary<string, object> rowData)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -341,7 +330,7 @@ public class Database
 
     public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -406,7 +395,7 @@ public class Database
 
     public void RemoveColumnFromTable(string tableName, string columnName)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -486,7 +475,7 @@ public class Database
     public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
         string newValue)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -552,7 +541,7 @@ public class Database
 
     public void DeleteTable(string tableName)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -572,7 +561,7 @@ public class Database
 
     public string GetPrimaryKeyColumn(string tableName)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
             using (var command = new Mono.Data.Sqlite.SqliteCommand($"PRAGMA table_info({tableName});", connection))
@@ -595,7 +584,7 @@ public class Database
 
     public void DeleteRowFromTable(string tableName, Dictionary<string, object> rowData)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -655,7 +644,7 @@ public class Database
 
     public void MakePrimaryKey(string tableName, string newPrimaryKey)
     {
-        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -768,7 +757,7 @@ public class Database
 
     public bool CheckPrimaryKeyExists(string tableName, string primaryKeyColumn, string keyValue)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -784,7 +773,7 @@ public class Database
 
     public void InsertRow(string tableName, Dictionary<string, object> rowData)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -813,7 +802,7 @@ public class Database
             sqlType = "TEXT"; // Stored as "x,y" or "x,y,z"
         }
 
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
 
@@ -836,7 +825,7 @@ public class Database
     {
         List<TableColumn> columns = new List<TableColumn>();
 
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
             using (var command = connection.CreateCommand())
@@ -869,7 +858,7 @@ public class Database
 
     public void DeleteColumn(string tableName, string columnName)
     {
-        using (var connection = new SqliteConnection($"Data Source={Path};Version=3;"))
+        using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
             connection.Open();
             using (var command = connection.CreateCommand())

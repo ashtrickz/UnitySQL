@@ -25,7 +25,7 @@ public static class SQLQueryHandler
             string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
             string query = $"SELECT * FROM {table} {whereClause};";
 
-            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
             {
                 connection.Open();
                 using (var dbCommand = connection.CreateCommand())
@@ -49,7 +49,7 @@ public static class SQLQueryHandler
         (string[], List<string[]>) tempResult = new();
         try
         {
-            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
             {
                 connection.Open();
                 using (var dbCommand = connection.CreateCommand())

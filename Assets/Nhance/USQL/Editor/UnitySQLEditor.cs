@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using MySqlConnector;
 using System.Linq;
-using Mono.Data.Sqlite;
+// using Mono.Data.Sqlite;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
@@ -372,11 +372,53 @@ public class UnitySQLManager : EditorWindow
         {
             AddNewConnection();
         }
-        
+        if (GUILayout.Button("Connect Remotely", GUILayout.Width(150), GUILayout.Height(25)))
+        {
+            ConnectAndDrawRemoteConnection();
+        }
         GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
         
         EditorGUILayout.EndVertical();
+    }
+
+    private void ConnectAndDrawRemoteConnection()
+    {
+
+        string connectionString = "Server=127.0.0.1;" +
+                                  "Database=unity_db;" +
+                                  "User ID=remoteUser;" +
+                                  "Password=nasty;" +
+                                  "SslMode=None;";
+
+        var connection = new MySqlConnection(connectionString);
+
+        string query = "select * from players";
+        try
+        {
+            connections.Add(new DatabaseConnection(connectionString));
+            selectedConnectionIndex = 0;
+            connection.Open();
+            Debug.Log("Подключение к MySQL успешно установлено!");
+
+            using (var command = new MySqlCommand(query, connection))
+            {
+
+                using (var reader = command.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        string steamID = reader["SteamID"].ToString();
+                        Debug.Log($"ID игрока: {steamID}");
+                    }
+                }
+            }
+
+        }
+        catch (MySqlException ex)
+        {
+            Debug.LogError($"Ошибка подключения: {ex.Message}");
+        }
     }
 
 
@@ -544,7 +586,7 @@ public class UnitySQLManager : EditorWindow
             string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
             string query = $"SELECT * FROM {selectedTableForContent} {whereClause};";
 
-            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            using (var connection = new MySqlConnection($"Data Source={database.ConnectionString};Version=3;"))
             {
                 connection.Open();
                 using (var dbCommand = connection.CreateCommand())
@@ -1143,7 +1185,7 @@ public class UnitySQLManager : EditorWindow
         {
             tableData.Clear(); // Clear previous results
 
-            using (var connection = new SqliteConnection($"Data Source={database.Path};Version=3;"))
+            using (var connection = new MySqlConnection($"Data Source={database.ConnectionString};Version=3;"))
             {
                 connection.Open();
                 using (var dbCommand = connection.CreateCommand())

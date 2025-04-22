@@ -1,36 +1,52 @@
 using System.Collections.Generic;
-using Mono.Data.Sqlite;
+using MySqlConnector;
 using UnityEngine;
 
 public class DatabaseConnection
 {
     public string Name;
-    public string Path;
+    public string Path; // тут будет строка подключения
     public bool ShowDatabases;
     public List<Database> Databases;
 
-    public DatabaseConnection(string path)
+    public DatabaseConnection(string connectionString)
     {
-        Path = path;
-        Name = System.IO.Path.GetFileNameWithoutExtension(path);
-        Databases = new List<Database> { new Database(Name, Path) };
+        Path = connectionString;
+        Name = "MySQL_Connection";
+        Databases = new List<Database>();
+        RefreshDatabases();
     }
-    
+
+    public void RefreshDatabases()
+    {
+        Databases.Clear();
+
+        using (var connection = new MySqlConnection(Path))
+        {
+            connection.Open();
+            using (var command = new MySqlCommand("SHOW DATABASES;", connection))
+            using (var reader = command.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    string dbName = reader.GetString(0);
+                    Databases.Add(new Database(dbName, Path));
+                }
+            }
+        }
+    }
+
     public void CreateDatabase(string databaseName)
     {
-        string databasePath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path), $"{databaseName}.db");
-
-        if (!System.IO.File.Exists(databasePath))
+        using (var connection = new MySqlConnection(Path))
         {
-            SqliteConnection.CreateFile(databasePath);
-            Database newDatabase = new Database(databaseName, databasePath);
-            Databases.Add(newDatabase);
-            Debug.Log($"[INFO] Database '{databaseName}' created at {databasePath}.");
-        }
-        else
-        {
-            Debug.LogError($"[ERROR] Database '{databaseName}' already exists.");
+            connection.Open();
+            using (var command = new MySqlCommand($"CREATE DATABASE IF NOT EXISTS `{databaseName}`;", connection))
+            {
+                command.ExecuteNonQuery();
+                Databases.Add(new Database(databaseName, Path));
+                Debug.Log($"[INFO] Database '{databaseName}' создана.");
+            }
         }
     }
-
 }
