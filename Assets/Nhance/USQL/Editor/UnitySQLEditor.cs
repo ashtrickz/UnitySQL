@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.Sql;
+using MySqlConnector;
 using System.Linq;
 using Mono.Data.Sqlite;
 using UnityEngine.UIElements;
