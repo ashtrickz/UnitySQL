@@ -19,7 +19,7 @@ public class ChangeColumnWindow : EditorWindow
         columnName = colName;
         newColumnName = colName;
 
-        currentColumnType = database.GetColumnType(tableName, columnName);
+        currentColumnType = database.GetColumnType_Maria(tableName, columnName);
         selectedTypeIndex = System.Array.IndexOf(columnTypes, currentColumnType);
         if (selectedTypeIndex == -1) selectedTypeIndex = 0; // Default to TEXT if unknown type
 
@@ -39,7 +39,7 @@ public class ChangeColumnWindow : EditorWindow
 
         if (GUILayout.Button("Save"))
         {
-            database.ChangeColumnType(tableName, columnName, newColumnName, columnTypes[selectedTypeIndex]);
+            database.ChangeColumnType_Maria(tableName, columnName, newColumnName, columnTypes[selectedTypeIndex]);
             database.LoadTableContent(tableName);
             Close();
         }

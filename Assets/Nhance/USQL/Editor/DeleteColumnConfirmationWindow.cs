@@ -42,7 +42,7 @@ public class DeleteColumnConfirmationWindow : EditorWindow
     {
         if (database != null && !string.IsNullOrEmpty(columnName))
         {
-            database.RemoveColumnFromTable(tableName, columnName);
+            database.RemoveColumnFromTable_Maria(tableName, columnName);
             Debug.Log($"[SUCCESS] Deleted column: {columnName} from table: {tableName}");
             database.LoadTableContent(tableName);
         }

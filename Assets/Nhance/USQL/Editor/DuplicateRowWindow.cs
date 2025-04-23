@@ -35,7 +35,7 @@ public class DuplicateRowWindow : EditorWindow
         // Iterate over all columns in the row
         foreach (var column in originalRow.Keys)
         {
-            string columnType = database.GetColumnType(tableName, column);
+            string columnType = database.GetColumnType_Maria(tableName, column);
 
             EditorGUILayout.BeginHorizontal();
             EditorGUILayout.LabelField(column, GUILayout.Width(120));

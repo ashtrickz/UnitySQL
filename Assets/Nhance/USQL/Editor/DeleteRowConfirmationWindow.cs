@@ -43,7 +43,7 @@ public class DeleteRowConfirmationWindow : EditorWindow
     {
         if (database != null && rowData != null)
         {
-            database.DeleteRowFromTable(tableName, rowData);
+            database.DeleteRowFromTable_Maria(tableName, rowData);
             Debug.Log($"[SUCCESS] Deleted row from {tableName}");
             
             database.LoadTableContent(tableName);

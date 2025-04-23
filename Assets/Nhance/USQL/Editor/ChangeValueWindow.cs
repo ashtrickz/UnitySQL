@@ -49,7 +49,7 @@ public class ChangeValueWindow : EditorWindow
 
     private void ApplyChange()
     {
-        database.UpdateCellValue(tableName, rowData, columnName, newValue);
+        database.UpdateCellValue_Maria(tableName, rowData, columnName, newValue);
         database.LoadTableContent(tableName);
         Close();
     }

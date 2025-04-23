@@ -75,7 +75,7 @@ public class CreateTableWindow : EditorWindow
         {
             if (!string.IsNullOrEmpty(tableName) && columns.Count > 0)
             {
-                database.CreateTable(tableName, columns, primaryKeyIndex);
+                database.CreateTable_Maria(tableName, columns, primaryKeyIndex);
                 Close();
             }
             else

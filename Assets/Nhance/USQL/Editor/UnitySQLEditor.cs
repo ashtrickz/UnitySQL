@@ -504,7 +504,7 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
@@ -766,7 +766,7 @@ public class UnitySQLManager : EditorWindow
         var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
         if (table == null) return;
 
-        string primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
+        string primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(selectedTableForContent);
         int totalRows = table.Data.Count;
         int totalPages = Mathf.CeilToInt((float) totalRows / rowsPerPage);
         currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
@@ -826,7 +826,7 @@ public class UnitySQLManager : EditorWindow
                     }
 
                     // **Fetch Column Type from Database**
-                    string columnType = database.GetColumnType(selectedTableForContent, column);
+                    string columnType = database.GetColumnType_Maria(selectedTableForContent, column);
 
                     // **Ensure PropertyField Always Renders for Unity Object Types**
                     if (columnType == "GameObject" || columnType == "Sprite")
@@ -911,7 +911,7 @@ public class UnitySQLManager : EditorWindow
 
         if (database != null)
         {
-            database.InsertRow(tableName, newRowData);
+            database.InsertRow_Maria(tableName, newRowData);
             database.LoadTableContent(tableName);
         }
     }
@@ -923,7 +923,7 @@ public class UnitySQLManager : EditorWindow
 
         if (database != null)
         {
-            string primaryKeyColumn = database.GetPrimaryKeyColumn(tableName);
+            string primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(tableName);
             DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
         }
     }
@@ -997,7 +997,7 @@ public class UnitySQLManager : EditorWindow
         ConfirmationWindow.ShowWindow(
             "Delete Table",
             $"Are you sure you want to delete table '{tableName}'?",
-            () => database.DeleteTable(tableName)
+            () => database.DeleteTable_Maria(tableName)
         );
     }
 
@@ -1030,7 +1030,7 @@ public class UnitySQLManager : EditorWindow
         {
             string convertedValue = "";
 
-            string columnType = database.GetColumnType(tableName, columnName);
+            string columnType = database.GetColumnType_Maria(tableName, columnName);
 
             try
             {
@@ -1064,7 +1064,7 @@ public class UnitySQLManager : EditorWindow
                     rowData[columnName] = newValue;
                 }
 
-                database.UpdateCellValue(tableName, rowData, columnName, convertedValue);
+                database.UpdateCellValue_Maria(tableName, rowData, columnName, convertedValue);
                 database.LoadTableContent(tableName);
             }
             catch (Exception e)
@@ -1101,7 +1101,7 @@ public class UnitySQLManager : EditorWindow
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
         // Get column names for this table
-        List<string> columnNames = database.GetColumnNames(tableName);
+        List<string> columnNames = database.GetColumnNames_Maria(tableName);
 
         AddRowWindow.ShowWindow(database, tableName, columnNames);
     }
@@ -1185,7 +1185,7 @@ public class UnitySQLManager : EditorWindow
         {
             tableData.Clear(); // Clear previous results
 
-            using (var connection = new MySqlConnection($"Data Source={database.ConnectionString};Version=3;"))
+            using (var connection = new MySqlConnection(database.ConnectionString))
             {
                 connection.Open();
                 using (var dbCommand = connection.CreateCommand())
@@ -1294,7 +1294,7 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
@@ -1414,7 +1414,7 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
+        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
         List<string> selectedColumns = new List<string>();
 
         for (int i = 0; i < columns.Count; i++)
@@ -1441,7 +1441,7 @@ public class UnitySQLManager : EditorWindow
                 {
                     foreach (string columnName in selectedColumns)
                     {
-                        database.DeleteColumn(selectedTableForContent, columnName);
+                        database.DeleteColumn_Maria(selectedTableForContent, columnName);
                     }
 
                     database.LoadTableContent(selectedTableForContent);
@@ -1461,7 +1461,7 @@ public class UnitySQLManager : EditorWindow
             bool isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
 
             // Apply Changes to the Database
-            database.ModifyColumn(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+            database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
         }
 
         database.LoadTableContent(selectedTableForContent);
@@ -1546,7 +1546,7 @@ public class UnitySQLManager : EditorWindow
 
         if (database != null)
         {
-            return database.CheckPrimaryKeyExists(tableName, primaryKeyColumn, keyValue);
+            return database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
         }
         
         return false;
@@ -1558,7 +1558,7 @@ public class UnitySQLManager : EditorWindow
 
         if (database != null)
         {
-            database.AddColumn(tableName, columnName, columnType);
+            database.AddColumn_Maria(tableName, columnName, columnType);
             database.LoadTableContent(tableName);
         }
     }

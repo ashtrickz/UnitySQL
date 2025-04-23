@@ -21,7 +21,7 @@ public class AddRowModalUI : MonoBehaviour
     
     public void ShowModal(Database database, string tableName)
     {
-        tableColumns = database.GetTableColumns(tableName);
+        tableColumns = database.GetTableColumns_Maria(tableName);
         
         tableColumns.ForEach(column =>
         {
@@ -42,7 +42,7 @@ public class AddRowModalUI : MonoBehaviour
                 rowData.Add(tableColumns[i].Name, addRowItems[i].FieldText);
             }
 
-            database.InsertIntoTable(tableName, rowData);
+            database.InsertIntoTable_Maria(tableName, rowData);
             
             OnAddRow?.Invoke();
             addButton.onClick.RemoveAllListeners();

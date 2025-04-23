@@ -73,7 +73,7 @@ public class AddRowWindow : EditorWindow
                 rowData[kvp.Key] = kvp.Value;
             }
 
-            database.InsertIntoTable(tableName, rowData);
+            database.InsertIntoTable_Maria(tableName, rowData);
             database.LoadTableContent(tableName);
             Close();
         }
