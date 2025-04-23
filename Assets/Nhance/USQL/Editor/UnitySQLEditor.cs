@@ -1143,7 +1143,7 @@ public class UnitySQLManager : EditorWindow
     private void MakeColumnPrimaryKey(string tableName, string columnName)
     {
         var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        database.MakePrimaryKey(tableName, columnName);
+        database.MakePrimaryKey_Maria(tableName, columnName);
         database.LoadTableContent(tableName);
     }
 
@@ -1643,7 +1643,7 @@ public class UnitySQLManager : EditorWindow
                 OpenDeleteColumnWindow(selectedTableForContent, columnName);
                 break;
             case "PrimaryKey":
-                database.MakePrimaryKey(selectedTableForContent, columnName);
+                database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
                 break;
         }
     }

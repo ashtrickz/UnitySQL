@@ -1114,7 +1114,7 @@ public class Database
         }
     }
 
-    public void MakePrimaryKey(string tableName, string newPrimaryKey)
+    public void MakePrimaryKey_Lite(string tableName, string newPrimaryKey)
     {
         using (var connection = new Mono.Data.Sqlite.SqliteConnection($"Data Source={ConnectionString};Version=3;"))
         {
@@ -1217,6 +1217,70 @@ public class Database
         }
     }
 
+    public void MakePrimaryKey_Maria(string tableName, string newPrimaryKey)
+    {
+        var connection = new MySqlConnector.MySqlConnection(ConnectionString);
+        connection.Open();
+
+        // Проверим, существует ли указанная колонка
+        var checkColumn = new MySqlConnector.MySqlCommand(@"
+        SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @table AND COLUMN_NAME = @column;", connection);
+        checkColumn.Parameters.AddWithValue("@table", tableName);
+        checkColumn.Parameters.AddWithValue("@column", newPrimaryKey);
+
+        long exists = (long) (checkColumn.ExecuteScalar() ?? 0);
+        if (exists == 0)
+        {
+            UnityEngine.Debug.LogError($"[ERROR] Column '{newPrimaryKey}' does not exist in table '{tableName}'.");
+            connection.Close();
+            return;
+        }
+
+        // Проверим, уже ли это PRIMARY KEY
+        string oldPrimaryKey = GetPrimaryKeyColumn_Maria(tableName);
+        if (oldPrimaryKey == newPrimaryKey)
+        {
+            UnityEngine.Debug.LogWarning($"[INFO] Column '{newPrimaryKey}' is already the primary key.");
+            connection.Close();
+            return;
+        }
+
+        // Проверим на наличие дубликатов
+        var checkDuplicates = new MySqlConnector.MySqlCommand($@"
+        SELECT `{newPrimaryKey}`, COUNT(*) 
+        FROM `{tableName}` 
+        GROUP BY `{newPrimaryKey}` 
+        HAVING COUNT(*) > 1;", connection);
+
+        var reader = checkDuplicates.ExecuteReader();
+        if (reader.HasRows)
+        {
+            reader.Close();
+            UnityEngine.Debug.LogError($"[ERROR] Cannot set '{newPrimaryKey}' as PRIMARY KEY — duplicates found.");
+            connection.Close();
+            return;
+        }
+
+        reader.Close();
+
+        // Удалим старый PRIMARY KEY
+        if (!string.IsNullOrEmpty(oldPrimaryKey))
+        {
+            var dropPK = new MySqlConnector.MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", connection);
+            dropPK.ExecuteNonQuery();
+        }
+
+        // Установим новый PRIMARY KEY
+        var addPK = new MySqlConnector.MySqlCommand($"ALTER TABLE `{tableName}` ADD PRIMARY KEY (`{newPrimaryKey}`);",
+            connection);
+        addPK.ExecuteNonQuery();
+
+        connection.Close();
+        UnityEngine.Debug.Log($"[SUCCESS] Column '{newPrimaryKey}' is now the PRIMARY KEY for table '{tableName}'.");
+    }
+
+
     public void RemoveTable(string tableName)
     {
         // Logic for removing a table
@@ -1252,13 +1316,13 @@ public class Database
         var command = new MySqlConnector.MySqlCommand(query, connection);
         command.Parameters.AddWithValue("@keyValue", keyValue);
 
-        long count = (long)(command.ExecuteScalar() ?? 0);
+        long count = (long) (command.ExecuteScalar() ?? 0);
         connection.Close();
 
         return count > 0;
     }
 
-    
+
     public void InsertRow_Lite(string tableName, Dictionary<string, object> rowData)
     {
         using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
@@ -1301,7 +1365,7 @@ public class Database
         connection.Close();
     }
 
-    
+
     public void AddColumn_Lite(string tableName, string columnName, string columnType)
     {
         string sqlType = columnType;
@@ -1342,7 +1406,7 @@ public class Database
 
         connection.Close();
     }
-    
+
     public List<TableColumn> GetTableColumns_Lite(string tableName)
     {
         List<TableColumn> columns = new List<TableColumn>();
@@ -1370,7 +1434,7 @@ public class Database
 
         return columns;
     }
-    
+
     public List<TableColumn> GetTableColumns_Maria(string tableName)
     {
         List<TableColumn> columns = new List<TableColumn>();
@@ -1403,7 +1467,7 @@ public class Database
         return columns;
     }
 
-    
+
     public void DeleteColumn_Lite(string tableName, string columnName)
     {
         using (var connection = new SqliteConnection($"Data Source={ConnectionString};Version=3;"))
@@ -1417,7 +1481,7 @@ public class Database
             }
         }
     }
-    
+
     public void DeleteColumn_Maria(string tableName, string columnName)
     {
         var connection = new MySqlConnector.MySqlConnection(ConnectionString);
@@ -1431,7 +1495,7 @@ public class Database
         checkCmd.Parameters.AddWithValue("@table", tableName);
         checkCmd.Parameters.AddWithValue("@column", columnName);
 
-        long exists = (long)(checkCmd.ExecuteScalar() ?? 0);
+        long exists = (long) (checkCmd.ExecuteScalar() ?? 0);
         if (exists == 0)
         {
             UnityEngine.Debug.LogWarning($"[WARNING] Column `{columnName}` does not exist in `{tableName}`.");
@@ -1448,14 +1512,14 @@ public class Database
 
         UnityEngine.Debug.Log($"[SUCCESS] Column `{columnName}` deleted from `{tableName}`.");
     }
-    
+
     public class TableColumn
     {
         public string Name;
         public string Type;
         public bool IsPrimaryKey;
     }
-    
+
     public class ColumnDefinition
     {
         public string Name;
