@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using MySqlConnector;
 using System.Linq;
-// using Mono.Data.Sqlite;
+using Mono.Data.Sqlite;
 using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
@@ -29,7 +29,7 @@ public class UnitySQLManager : EditorWindow
     private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
 
     private int currentPage = 0;
-    private const int rowsPerPage = 5;
+    private const int rowsPerPage = 10;
 
     private string selectedTableForContent = "";
     private Vector2 scrollPosition;
@@ -46,7 +46,28 @@ public class UnitySQLManager : EditorWindow
     private Vector2 sqlScrollPosition;
 
     private string searchQuery = "";
-    
+
+    private bool showAddConnectionForm = false;
+
+    private enum ConnectionType
+    {
+        Local,
+        Remote
+    }
+
+    private ConnectionType selectedConnectionType = ConnectionType.Local;
+
+// Local
+    private string localDatabasePath = "";
+
+// Remote
+    private string remoteServerAddress = "127.0.0.1";
+    private string remoteDatabaseName = "";
+    private string remoteUserID = "";
+    private string remotePassword = "";
+    private string remoteSSLMode = "None";
+
+
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
@@ -200,11 +221,13 @@ public class UnitySQLManager : EditorWindow
 
         // Search bar
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-        searchQuery = EditorGUILayout.TextField(searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
+        searchQuery =
+            EditorGUILayout.TextField(searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
         if (GUILayout.Button("X", EditorStyles.toolbarButton, GUILayout.Width(20)))
         {
             searchQuery = ""; // Clear search
         }
+
         EditorGUILayout.EndHorizontal();
 
         var consoleBackground = MakeBackgroundTexture(new Color(.1f, .1f, .1f, 1));
@@ -214,13 +237,13 @@ public class UnitySQLManager : EditorWindow
             padding = new RectOffset(5, 5, 5, 5),
             margin = new RectOffset(5, 5, 5, 5),
             fontStyle = FontStyle.Normal,
-            normal = 
+            normal =
             {
                 background = consoleBackground,
                 textColor = Color.white
             }
-        }; 
-        
+        };
+
         for (var i = 0; i < connections.Count; i++)
         {
             var connection = connections[i];
@@ -271,9 +294,10 @@ public class UnitySQLManager : EditorWindow
             if (isConnectionExpanded)
             {
                 foreach (var database in connection.Databases.Where(db =>
-                             string.IsNullOrEmpty(searchQuery) || 
+                             string.IsNullOrEmpty(searchQuery) ||
                              db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                             db.Tables.Any(table => table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)))
+                             db.Tables.Any(table =>
+                                 table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)))
 
                 {
                     if (!databaseStates.ContainsKey(database))
@@ -327,7 +351,7 @@ public class UnitySQLManager : EditorWindow
                     if (isDatabaseExpanded)
                     {
                         foreach (var table in database.Tables.Where(table =>
-                                     string.IsNullOrEmpty(searchQuery) || 
+                                     string.IsNullOrEmpty(searchQuery) ||
                                      table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
 
                         {
@@ -335,7 +359,7 @@ public class UnitySQLManager : EditorWindow
                             GUILayout.Space(15);
                             GUILayout.Button("", GUILayout.ExpandWidth(true), GUILayout.Height(2));
                             EditorGUILayout.EndHorizontal();
-                            
+
                             EditorGUILayout.BeginHorizontal();
                             GUILayout.Space(30);
 
@@ -348,7 +372,8 @@ public class UnitySQLManager : EditorWindow
                             }
 
                             // **"X" Button to Remove Table**
-                            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
+                            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25),
+                                    GUILayout.Height(20)))
                             {
                                 OpenDeleteTableWindow(database, table.Name);
                             }
@@ -370,21 +395,17 @@ public class UnitySQLManager : EditorWindow
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("Add Connection", GUILayout.Width(150), GUILayout.Height(25)))
         {
-            AddNewConnection();
+            showAddConnectionForm = !showAddConnectionForm;
         }
-        if (GUILayout.Button("Connect Remotely", GUILayout.Width(150), GUILayout.Height(25)))
-        {
-            ConnectAndDrawRemoteConnection();
-        }
+
         GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
-        
+
         EditorGUILayout.EndVertical();
     }
 
     private void ConnectAndDrawRemoteConnection()
     {
-
         string connectionString = "Server=127.0.0.1;" +
                                   "Database=unity_db;" +
                                   "User ID=remoteUser;" +
@@ -403,7 +424,6 @@ public class UnitySQLManager : EditorWindow
 
             using (var command = new MySqlCommand(query, connection))
             {
-
                 using (var reader = command.ExecuteReader())
                 {
                     if (reader.Read())
@@ -413,7 +433,6 @@ public class UnitySQLManager : EditorWindow
                     }
                 }
             }
-
         }
         catch (MySqlException ex)
         {
@@ -424,16 +443,75 @@ public class UnitySQLManager : EditorWindow
 
     private Texture2D MakeBackgroundTexture(Color color)
     {
-        var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false); 
+        var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false);
         backgroundTexture.SetPixel(0, 0, color);
         backgroundTexture.Apply();
 
         return backgroundTexture;
     }
-    
+
     private void DrawRightPanel()
     {
         EditorGUILayout.BeginVertical(style: "box");
+
+        if (showAddConnectionForm)
+        {
+            // GUILayout.Space(10);
+            // EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            selectedConnectionType =
+                (ConnectionType) EditorGUILayout.EnumPopup("Connection Type", selectedConnectionType);
+
+            if (selectedConnectionType == ConnectionType.Local)
+            {
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Database File", GUILayout.Width(100));
+                localDatabasePath = EditorGUILayout.TextField(localDatabasePath, GUILayout.ExpandWidth(true));
+                if (GUILayout.Button("Browse", GUILayout.Width(70)))
+                {
+                    string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        localDatabasePath = path;
+                    }
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+            else if (selectedConnectionType == ConnectionType.Remote)
+            {
+                remoteServerAddress = EditorGUILayout.TextField("Server Address", remoteServerAddress);
+                remoteDatabaseName = EditorGUILayout.TextField("Database Name", remoteDatabaseName);
+                remoteUserID = EditorGUILayout.TextField("User ID", remoteUserID);
+                remotePassword = EditorGUILayout.PasswordField("Password", remotePassword);
+                remoteSSLMode = EditorGUILayout.TextField("SSL Mode", remoteSSLMode);
+            }
+
+            GUILayout.Space(5);
+            if (GUILayout.Button("Add", GUILayout.Height(25)))
+            {
+                if (selectedConnectionType == ConnectionType.Local)
+                {
+                    if (!string.IsNullOrEmpty(localDatabasePath))
+                    {
+                        connections.Add(new DatabaseConnection(localDatabasePath));
+                        SaveSessionData();
+                    }
+                }
+                else
+                {
+                    string connectionString =
+                        $"Server={remoteServerAddress};Database={remoteDatabaseName};User ID={remoteUserID};Password={remotePassword};SslMode={remoteSSLMode};";
+                    connections.Add(new DatabaseConnection(connectionString));
+                    SaveSessionData();
+                }
+
+                showAddConnectionForm = false; // Закрыть форму после добавления
+            }
+
+            EditorGUILayout.EndVertical();
+            return;
+        }
 
         if (selectedConnectionIndex < 0 || selectedDatabaseIndex < 0)
         {
@@ -457,17 +535,18 @@ public class UnitySQLManager : EditorWindow
                     textColor = Color.white
                 }
             };
-            
+
             if (selectedTab == index) GUI.backgroundColor = Color.cyan;
-            
+
             if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
                 selectedTab = index;
 
-            GUI.backgroundColor =  backColor;
-            
+            GUI.backgroundColor = backColor;
+
             if (index == tabs.Length - 1) continue;
             GUILayout.Space(10);
         }
+
         EditorGUILayout.EndHorizontal();
 
         switch (selectedTab)
@@ -511,7 +590,7 @@ public class UnitySQLManager : EditorWindow
                 EditorStyles.boldLabel);
             return;
         }
-        
+
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         EditorGUILayout.LabelField($"Search in table: {selectedTableForContent}", EditorStyles.boldLabel);
         GUILayout.FlexibleSpace();
@@ -520,8 +599,9 @@ public class UnitySQLManager : EditorWindow
         {
             ExecuteSearchQuery(database);
         }
+
         EditorGUILayout.EndHorizontal();
-        
+
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
         // Table Header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
@@ -558,7 +638,7 @@ public class UnitySQLManager : EditorWindow
 
             EditorGUILayout.EndHorizontal();
         }
-        
+
         EditorGUILayout.EndScrollView();
 
         // Display search results
@@ -635,7 +715,7 @@ public class UnitySQLManager : EditorWindow
 
         var headerStyle = EditorStyles.toolbarButton;
         headerStyle.normal.textColor = Color.white;
-        
+
         if (GUILayout.Button("Select All", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
         {
             for (int i = 0; i < tableSelections.Count; i++)
@@ -643,7 +723,7 @@ public class UnitySQLManager : EditorWindow
                 tableSelections[i] = selectAllTables;
             }
         }
-        
+
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
@@ -651,31 +731,31 @@ public class UnitySQLManager : EditorWindow
         }
 
         headerStyle.normal.textColor = new Color(184, 0, 231, 1);
-        if (GUILayout.Button("🏗️ Structure", headerStyle,GUILayout.Width(100), GUILayout.Height(25)))
+        if (GUILayout.Button("🏗️ Structure", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Structure");
         }
 
         headerStyle.normal.textColor = Color.cyan;
-        if (GUILayout.Button("🔍 Search", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
+        if (GUILayout.Button("🔍 Search", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Search");
         }
 
         headerStyle.normal.textColor = Color.green;
-        if (GUILayout.Button("➕ Insert", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
+        if (GUILayout.Button("➕ Insert", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Insert");
         }
 
         headerStyle.normal.textColor = Color.yellow;
-        if (GUILayout.Button("🗑️ Clear", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
+        if (GUILayout.Button("🗑️ Clear", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Clear");
         }
 
         headerStyle.normal.textColor = Color.red;
-        if (GUILayout.Button("❌ Delete", headerStyle,GUILayout.Width(80), GUILayout.Height(25)))
+        if (GUILayout.Button("❌ Delete", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
         {
             PerformBulkTableAction("Delete");
         }
@@ -699,7 +779,7 @@ public class UnitySQLManager : EditorWindow
 
             var style = EditorStyles.toolbarButton;
             style.normal.textColor = Color.white;
-            
+
             // Action Buttons for Each Table
             if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
             {
@@ -708,7 +788,7 @@ public class UnitySQLManager : EditorWindow
 
             GUILayout.Space(5);
             style.normal.textColor = new Color(184, 0, 231, 1);
-            
+
             if (GUILayout.Button("🏗️ Structure", style, GUILayout.Width(100)))
             {
                 ExecuteTableAction(table, "Structure");
@@ -716,12 +796,12 @@ public class UnitySQLManager : EditorWindow
 
             GUILayout.Space(5);
             style.normal.textColor = Color.cyan;
-            
+
             if (GUILayout.Button("🔍 Search", style, GUILayout.Width(80)))
             {
                 ExecuteTableAction(table, "Search");
             }
-            
+
             GUILayout.Space(5);
             style.normal.textColor = Color.green;
 
@@ -729,7 +809,7 @@ public class UnitySQLManager : EditorWindow
             {
                 ExecuteTableAction(table, "Insert");
             }
-            
+
             GUILayout.Space(5);
             style.normal.textColor = Color.yellow;
 
@@ -737,7 +817,7 @@ public class UnitySQLManager : EditorWindow
             {
                 ExecuteTableAction(table, "Clear");
             }
-            
+
             GUILayout.Space(5);
             style.normal.textColor = Color.red;
 
@@ -772,7 +852,7 @@ public class UnitySQLManager : EditorWindow
         currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
 
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
-        
+
         if (table.Data.Count > 0)
         {
             // **Column Headers with Right-Click Menu**
@@ -804,7 +884,7 @@ public class UnitySQLManager : EditorWindow
             for (int i = currentPage * rowsPerPage; i < Mathf.Min((currentPage + 1) * rowsPerPage, totalRows); i++)
             {
                 var row = table.Data[i];
-                
+
                 EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
                 foreach (var column in row.Keys)
@@ -854,6 +934,7 @@ public class UnitySQLManager : EditorWindow
                         GUI.Label(cellRect, cellValue,
                             new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter});
                     }
+
                     cellStyle.alignment = TextAnchor.MiddleLeft;
                 }
 
@@ -862,7 +943,7 @@ public class UnitySQLManager : EditorWindow
                 EditorGUILayout.EndHorizontal();
                 GUILayout.Space(2);
             }
-            
+
             var style = new GUIStyle(GUI.skin.button);
             style.normal.textColor = Color.green;
             if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
@@ -877,7 +958,7 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.BeginHorizontal();
         GUILayout.FlexibleSpace();
 
-        if (GUILayout.Button("◀", EditorStyles.boldLabel,GUILayout.Width(25)) && currentPage > 0)
+        if (GUILayout.Button("◀", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage > 0)
         {
             currentPage--;
         }
@@ -1162,10 +1243,11 @@ public class UnitySQLManager : EditorWindow
         {
             ExecuteSQLQuery(database);
         }
+
         GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
         GUILayout.Space(5);
-        
+
         // Display execution messages (errors or success)
         if (!string.IsNullOrEmpty(sqlExecutionMessage))
         {
@@ -1325,7 +1407,7 @@ public class UnitySQLManager : EditorWindow
 
         var style = EditorStyles.toolbarButton;
         style.normal.textColor = Color.white;
-        
+
         if (GUILayout.Button("Select All", style, GUILayout.Width(100)))
         {
             for (int i = 0; i < columnSelections.Count; i++)
@@ -1333,12 +1415,13 @@ public class UnitySQLManager : EditorWindow
                 columnSelections[i] = selectAllColumns;
             }
         }
-        
+
         GUILayout.FlexibleSpace();
         if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
         {
             PerformBulkColumnAction("View");
         }
+
         style.normal.textColor = Color.red;
         if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
         {
@@ -1389,7 +1472,7 @@ public class UnitySQLManager : EditorWindow
             {
                 PerformBulkAction("View", columns[i].Name);
             }
-            
+
             style.normal.textColor = Color.red;
             if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
             {
@@ -1405,6 +1488,7 @@ public class UnitySQLManager : EditorWindow
         {
             OpenAddColumnWindow(selectedTableForContent);
         }
+
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.EndScrollView();
     }
@@ -1548,7 +1632,7 @@ public class UnitySQLManager : EditorWindow
         {
             return database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
         }
-        
+
         return false;
     }
 
@@ -1631,9 +1715,9 @@ public class UnitySQLManager : EditorWindow
         {
             case "View":
                 selectedTab = 3; // Switch to SQL Tab
-                    database.SQLQuery =
-                        $"SELECT {columnName} FROM {selectedTableForContent};";
-                    ExecuteSQLQuery(database);
+                database.SQLQuery =
+                    $"SELECT {columnName} FROM {selectedTableForContent};";
+                ExecuteSQLQuery(database);
                 break;
 
             case "Edit":
