@@ -23,10 +23,29 @@ public class UnitySQLManager : EditorWindow
     private int selectedColumnTypeIndex = 0; // Stores the selected index
     private string selectedTableForColumns = "";
 
-    private string[] availableColumnTypes =
-        {"TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"}; // Available column types
+    private readonly string[] availableColumnTypes =
+    {
+        "TEXT",
+        "VARCHAR",
+        "INTEGER",
+        "REAL",
+        "BLOB",
+        "GameObject",
+        "Sprite",
+        "Vector2",
+        "Vector3"
+    }; // Available column types
 
-    private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
+    private readonly string[] availableOperators =
+    {
+        "=",
+        "!=",
+        "LIKE",
+        "<",
+        ">",
+        "<=",
+        ">="
+    };
 
     private int currentPage = 0;
     private const int rowsPerPage = 10;
@@ -277,13 +296,13 @@ public class UnitySQLManager : EditorWindow
                 SaveSessionData(); // Save expanded state
             }
 
-            // **"+" Button to Add Database**
+            // "+" Button to Add Database
             if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenCreateDatabaseWindow(connection);
             }
 
-            // **"X" Button to Remove Connection**
+            // "X" Button to Remove Connection
             if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
             {
                 OpenDeleteConnectionWindow(connection);
@@ -404,41 +423,41 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
-    private void ConnectAndDrawRemoteConnection()
-    {
-        string connectionString = "Server=127.0.0.1;" +
-                                  "Database=unity_db;" +
-                                  "User ID=remoteUser;" +
-                                  "Password=nasty;" +
-                                  "SslMode=None;";
-
-        var connection = new MySqlConnection(connectionString);
-
-        string query = "select * from players";
-        try
-        {
-            connections.Add(new DatabaseConnection(connectionString));
-            selectedConnectionIndex = 0;
-            connection.Open();
-            Debug.Log("Подключение к MySQL успешно установлено!");
-
-            using (var command = new MySqlCommand(query, connection))
-            {
-                using (var reader = command.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        string steamID = reader["SteamID"].ToString();
-                        Debug.Log($"ID игрока: {steamID}");
-                    }
-                }
-            }
-        }
-        catch (MySqlException ex)
-        {
-            Debug.LogError($"Ошибка подключения: {ex.Message}");
-        }
-    }
+    // private void ConnectAndDrawRemoteConnection()
+    // {
+    //     string connectionString = "Server=127.0.0.1;" +
+    //                               "Database=unity_db;" +
+    //                               "User ID=remoteUser;" +
+    //                               "Password=nasty;" +
+    //                               "SslMode=None;";
+    //
+    //     var connection = new MySqlConnection(connectionString);
+    //
+    //     string query = "select * from players";
+    //     try
+    //     {
+    //         connections.Add(new DatabaseConnection(connectionString));
+    //         selectedConnectionIndex = 0;
+    //         connection.Open();
+    //         Debug.Log("Подключение к MySQL успешно установлено!");
+    //
+    //         using (var command = new MySqlCommand(query, connection))
+    //         {
+    //             using (var reader = command.ExecuteReader())
+    //             {
+    //                 if (reader.Read())
+    //                 {
+    //                     string steamID = reader["SteamID"].ToString();
+    //                     Debug.Log($"ID игрока: {steamID}");
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     catch (MySqlException ex)
+    //     {
+    //         Debug.LogError($"Ошибка подключения: {ex.Message}");
+    //     }
+    // }
 
 
     private Texture2D MakeBackgroundTexture(Color color)
@@ -501,7 +520,11 @@ public class UnitySQLManager : EditorWindow
                 else
                 {
                     string connectionString =
-                        $"Server={remoteServerAddress};Database={remoteDatabaseName};User ID={remoteUserID};Password={remotePassword};SslMode={remoteSSLMode};";
+                        $"Server={remoteServerAddress};" +
+                        $"Database={remoteDatabaseName};" +
+                        $"User ID={remoteUserID};" +
+                        $"Password={remotePassword};" +
+                        $"SslMode={remoteSSLMode};";
                     connections.Add(new DatabaseConnection(connectionString));
                     SaveSessionData();
                 }
@@ -553,23 +576,30 @@ public class UnitySQLManager : EditorWindow
         {
             case 0:
                 if (!string.IsNullOrEmpty(selectedTableForContent))
+                {
                     DrawDatabaseOverview();
+                    EditorGUILayout.EndVertical();
+                }
                 else
+                {
                     DrawDatabaseTables();
+                    EditorGUILayout.EndVertical();
+                }
                 break;
 
             case 1:
                 DrawStructure();
+                EditorGUILayout.EndVertical();
                 break;
             case 2:
                 DrawSearch();
+                EditorGUILayout.EndVertical();
                 break;
             case 3:
                 DrawSQLExecutor();
+                EditorGUILayout.EndVertical();
                 break;
         }
-
-        EditorGUILayout.EndVertical();
     }
 
     private void DrawSearch()
