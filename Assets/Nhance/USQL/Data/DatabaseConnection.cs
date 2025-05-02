@@ -9,44 +9,73 @@ public class DatabaseConnection
     public bool ShowDatabases;
     public List<Database> Databases;
 
-    public DatabaseConnection(string connectionString)
+    public EConnectionType ConnectionType;
+
+    
+    public DatabaseConnection(string connectionString, EConnectionType type)
     {
         Path = connectionString;
-        Name = "MySQL_Connection";
+        ConnectionType = type;
+        Name = type == EConnectionType.MySQL ? "MySQL_Connection" : "SQLite_Connection";
         Databases = new List<Database>();
         RefreshDatabases();
     }
+
 
     public void RefreshDatabases()
     {
         Databases.Clear();
 
-        using (var connection = new MySqlConnection(Path))
+        if (ConnectionType == EConnectionType.MySQL)
         {
-            connection.Open();
-            using (var command = new MySqlCommand("SHOW DATABASES;", connection))
-            using (var reader = command.ExecuteReader())
+            using (var connection = new MySqlConnection(Path))
             {
-                while (reader.Read())
+                connection.Open();
+                using (var command = new MySqlCommand("SHOW DATABASES;", connection))
+                using (var reader = command.ExecuteReader())
                 {
-                    string dbName = reader.GetString(0);
-                    Databases.Add(new Database(dbName, Path));
+                    while (reader.Read())
+                    {
+                        string dbName = reader.GetString(0);
+                        Databases.Add(new Database(dbName, Path, EConnectionType.MySQL));
+                    }
                 }
             }
         }
+        else // SQLite
+        {
+            // Для SQLite создаём один "виртуальный" Database, так как база — это файл
+            Databases.Add(new Database("SQLite_DB", Path, EConnectionType.SQLite));
+        }
     }
+
 
     public void CreateDatabase(string databaseName)
     {
-        using (var connection = new MySqlConnection(Path))
+        if (ConnectionType == EConnectionType.MySQL)
         {
-            connection.Open();
-            using (var command = new MySqlCommand($"CREATE DATABASE IF NOT EXISTS `{databaseName}`;", connection))
+            using (var connection = new MySqlConnection(Path))
             {
-                command.ExecuteNonQuery();
-                Databases.Add(new Database(databaseName, Path));
-                Debug.Log($"[INFO] Database '{databaseName}' создана.");
+                connection.Open();
+                using (var command = new MySqlCommand($"CREATE DATABASE IF NOT EXISTS `{databaseName}`;", connection))
+                {
+                    command.ExecuteNonQuery();
+                    Databases.Add(new Database(databaseName, Path, EConnectionType.MySQL));
+                    Debug.Log($"[INFO] Database '{databaseName}' создана.");
+                }
             }
         }
+        else
+        {
+            Debug.LogWarning("[INFO] SQLite не поддерживает создание нескольких баз в одном файле.");
+        }
     }
+
+    
+    public enum EConnectionType
+    {
+        MySQL,
+        SQLite
+    }
+
 }

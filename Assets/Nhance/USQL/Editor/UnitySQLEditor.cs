@@ -6,7 +6,6 @@ using System.Data;
 using MySqlConnector;
 using System.Linq;
 using Mono.Data.Sqlite;
-using UnityEngine.UIElements;
 using Object = UnityEngine.Object;
 
 public class UnitySQLManager : EditorWindow
@@ -68,13 +67,13 @@ public class UnitySQLManager : EditorWindow
 
     private bool showAddConnectionForm = false;
 
-    private enum ConnectionType
+    private enum EConnectionType
     {
         Local,
         Remote
     }
 
-    private ConnectionType selectedConnectionType = ConnectionType.Local;
+    private EConnectionType selectedConnectionType = EConnectionType.Local;
 
 // Local
     private string localDatabasePath = "";
@@ -159,7 +158,10 @@ public class UnitySQLManager : EditorWindow
         {
             foreach (var path in saveData.Connections)
             {
-                var connection = new DatabaseConnection(path);
+                var connection = new DatabaseConnection(path,
+                    path.Contains("SSL")
+                        ? DatabaseConnection.EConnectionType.MySQL
+                        : DatabaseConnection.EConnectionType.SQLite);
                 connections.Add(connection);
             }
         }
@@ -240,6 +242,7 @@ public class UnitySQLManager : EditorWindow
 
         // Search bar
         EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
         searchQuery =
             EditorGUILayout.TextField(searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
         if (GUILayout.Button("X", EditorStyles.toolbarButton, GUILayout.Width(20)))
@@ -423,43 +426,6 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.EndVertical();
     }
 
-    // private void ConnectAndDrawRemoteConnection()
-    // {
-    //     string connectionString = "Server=127.0.0.1;" +
-    //                               "Database=unity_db;" +
-    //                               "User ID=remoteUser;" +
-    //                               "Password=nasty;" +
-    //                               "SslMode=None;";
-    //
-    //     var connection = new MySqlConnection(connectionString);
-    //
-    //     string query = "select * from players";
-    //     try
-    //     {
-    //         connections.Add(new DatabaseConnection(connectionString));
-    //         selectedConnectionIndex = 0;
-    //         connection.Open();
-    //         Debug.Log("Подключение к MySQL успешно установлено!");
-    //
-    //         using (var command = new MySqlCommand(query, connection))
-    //         {
-    //             using (var reader = command.ExecuteReader())
-    //             {
-    //                 if (reader.Read())
-    //                 {
-    //                     string steamID = reader["SteamID"].ToString();
-    //                     Debug.Log($"ID игрока: {steamID}");
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     catch (MySqlException ex)
-    //     {
-    //         Debug.LogError($"Ошибка подключения: {ex.Message}");
-    //     }
-    // }
-
-
     private Texture2D MakeBackgroundTexture(Color color)
     {
         var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false);
@@ -469,21 +435,20 @@ public class UnitySQLManager : EditorWindow
         return backgroundTexture;
     }
 
-    private void DrawRightPanel()
+    private void DrawConnectionForm()
     {
-        EditorGUILayout.BeginVertical(style: "box");
+        GUILayout.Space(10);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-        if (showAddConnectionForm)
+        selectedConnectionType =
+            (EConnectionType) EditorGUILayout.EnumPopup("Connection Type", selectedConnectionType);
+
+        switch (selectedConnectionType)
         {
-            // GUILayout.Space(10);
-            // EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-            selectedConnectionType =
-                (ConnectionType) EditorGUILayout.EnumPopup("Connection Type", selectedConnectionType);
-
-            if (selectedConnectionType == ConnectionType.Local)
+            case EConnectionType.Local:
             {
                 EditorGUILayout.BeginHorizontal();
+
                 EditorGUILayout.LabelField("Database File", GUILayout.Width(100));
                 localDatabasePath = EditorGUILayout.TextField(localDatabasePath, GUILayout.ExpandWidth(true));
                 if (GUILayout.Button("Browse", GUILayout.Width(70)))
@@ -496,56 +461,72 @@ public class UnitySQLManager : EditorWindow
                 }
 
                 EditorGUILayout.EndHorizontal();
+                break;
             }
-            else if (selectedConnectionType == ConnectionType.Remote)
-            {
+            case EConnectionType.Remote:
+                EditorGUILayout.BeginVertical(GUILayout.Width(350));
+
                 remoteServerAddress = EditorGUILayout.TextField("Server Address", remoteServerAddress);
                 remoteDatabaseName = EditorGUILayout.TextField("Database Name", remoteDatabaseName);
                 remoteUserID = EditorGUILayout.TextField("User ID", remoteUserID);
                 remotePassword = EditorGUILayout.PasswordField("Password", remotePassword);
                 remoteSSLMode = EditorGUILayout.TextField("SSL Mode", remoteSSLMode);
-            }
 
-            GUILayout.Space(5);
-            if (GUILayout.Button("Add", GUILayout.Height(25)))
+                EditorGUILayout.EndVertical();
+                break;
+        }
+
+        GUILayout.Space(5);
+        if (GUILayout.Button("Add", GUILayout.Height(25)))
+        {
+            if (selectedConnectionType == EConnectionType.Local)
             {
-                if (selectedConnectionType == ConnectionType.Local)
+                if (!string.IsNullOrEmpty(localDatabasePath))
                 {
-                    if (!string.IsNullOrEmpty(localDatabasePath))
-                    {
-                        connections.Add(new DatabaseConnection(localDatabasePath));
-                        SaveSessionData();
-                    }
-                }
-                else
-                {
-                    string connectionString =
-                        $"Server={remoteServerAddress};" +
-                        $"Database={remoteDatabaseName};" +
-                        $"User ID={remoteUserID};" +
-                        $"Password={remotePassword};" +
-                        $"SslMode={remoteSSLMode};";
-                    connections.Add(new DatabaseConnection(connectionString));
+                    connections.Add(
+                        new DatabaseConnection(localDatabasePath, DatabaseConnection.EConnectionType.SQLite));
                     SaveSessionData();
                 }
-
-                showAddConnectionForm = false; // Закрыть форму после добавления
+            }
+            else
+            {
+                string connectionString =
+                    $"Server={remoteServerAddress};" +
+                    $"Database={remoteDatabaseName};" +
+                    $"User ID={remoteUserID};" +
+                    $"Password={remotePassword};" +
+                    $"SslMode={remoteSSLMode};";
+                connections.Add(new DatabaseConnection(connectionString, DatabaseConnection.EConnectionType.MySQL));
+                SaveSessionData();
             }
 
-            EditorGUILayout.EndVertical();
+            showAddConnectionForm = false; // Закрыть форму после добавления
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawRightPanel()
+    {
+        EditorGUILayout.BeginVertical(style: "box");
+
+        if (showAddConnectionForm)
+        {
+            DrawConnectionForm();
             return;
         }
 
         if (selectedConnectionIndex < 0 || selectedDatabaseIndex < 0)
         {
-            EditorGUILayout.LabelField("Select a connection and database to manage.");
-            EditorGUILayout.EndVertical();
+            EditorGUILayout.LabelField("Select a connection and database to manage.", GUILayout.Width(400));
+            // EditorGUILayout.EndVertical();
             return;
         }
 
         selectedTab = GUILayout.Toolbar(selectedTab, tabs, GUILayout.Height(0), GUILayout.Width(0));
 
         EditorGUILayout.BeginHorizontal();
+
         for (var index = 0; index < tabs.Length; index++)
         {
             var tab = tabs[index];
@@ -576,30 +557,23 @@ public class UnitySQLManager : EditorWindow
         {
             case 0:
                 if (!string.IsNullOrEmpty(selectedTableForContent))
-                {
                     DrawDatabaseOverview();
-                    EditorGUILayout.EndVertical();
-                }
                 else
-                {
                     DrawDatabaseTables();
-                    EditorGUILayout.EndVertical();
-                }
                 break;
 
             case 1:
                 DrawStructure();
-                EditorGUILayout.EndVertical();
                 break;
             case 2:
                 DrawSearch();
-                EditorGUILayout.EndVertical();
                 break;
             case 3:
                 DrawSQLExecutor();
-                EditorGUILayout.EndVertical();
                 break;
         }
+
+        EditorGUILayout.EndVertical();
     }
 
     private void DrawSearch()
@@ -876,7 +850,9 @@ public class UnitySQLManager : EditorWindow
         var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
         if (table == null) return;
 
-        string primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(selectedTableForContent);
+        string primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+            ? database.GetPrimaryKeyColumn_Maria(selectedTableForContent)
+            : database.GetPrimaryKeyColumn_Lite(selectedTableForContent);
         int totalRows = table.Data.Count;
         int totalPages = Mathf.CeilToInt((float) totalRows / rowsPerPage);
         currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
@@ -936,7 +912,9 @@ public class UnitySQLManager : EditorWindow
                     }
 
                     // **Fetch Column Type from Database**
-                    string columnType = database.GetColumnType_Maria(selectedTableForContent, column);
+                    var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                        ? database.GetColumnType_Maria(selectedTableForContent, column)
+                        : database.GetColumnType_Lite(selectedTableForContent, column);
 
                     // **Ensure PropertyField Always Renders for Unity Object Types**
                     if (columnType == "GameObject" || columnType == "Sprite")
@@ -1431,7 +1409,7 @@ public class UnitySQLManager : EditorWindow
             columnSelections = new List<bool>(new bool[columns.Count]);
         }
 
-// Bulk Actions Header
+        // Bulk Actions Header
         EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
         selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
 
@@ -1582,16 +1560,15 @@ public class UnitySQLManager : EditorWindow
         Debug.Log("Changes saved successfully!");
     }
 
-
-    private void AddNewConnection()
-    {
-        string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
-        if (!string.IsNullOrEmpty(path))
-        {
-            connections.Add(new DatabaseConnection(path));
-            SaveSessionData(); // Save immediately after adding a new connection
-        }
-    }
+    // private void AddNewConnection()
+    // {
+    //     string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
+    //     if (!string.IsNullOrEmpty(path))
+    //     {
+    //         connections.Add(new DatabaseConnection(path));
+    //         SaveSessionData(); // Save immediately after adding a new connection
+    //     }
+    // }
 
     private Texture2D MakeTex(int width, int height, Color col)
     {

@@ -4,6 +4,7 @@ using System.Linq;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using UnityEngine;
+using EConnectionType = DatabaseConnection.EConnectionType;
 
 public class Database
 {
@@ -12,12 +13,17 @@ public class Database
     public List<Table> Tables;
     public string SQLQuery;
 
-    public Database(string name, string connectionString)
+    public EConnectionType ConnectionType;
+
+    
+    public Database(string name, string connectionString, EConnectionType type)
     {
         Name = name;
-        ConnectionString = connectionString + $"Database={name};";
+        ConnectionString = type == EConnectionType.MySQL ? connectionString + $"Database={name};" : connectionString;
+        ConnectionType = type;
         Tables = new List<Table>();
-        RefreshTables();
+        if (type == EConnectionType.MySQL) LoadTables_Maria();
+        else LoadTables_Lite();
     }
 
     public List<string> GetTableNames()
