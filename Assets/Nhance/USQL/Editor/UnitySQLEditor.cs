@@ -587,7 +587,10 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
+        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+            ? database.GetTableColumns_Maria(selectedTableForContent)
+            : database.GetTableColumns_Lite(selectedTableForContent);
+        
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
@@ -670,16 +673,33 @@ public class UnitySQLManager : EditorWindow
             string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
             string query = $"SELECT * FROM {selectedTableForContent} {whereClause};";
 
-            using (var connection = new MySqlConnection($"Data Source={database.ConnectionString};Version=3;"))
+            switch (database.ConnectionType)
             {
-                connection.Open();
-                using (var dbCommand = connection.CreateCommand())
-                {
-                    dbCommand.CommandText = query;
-                    ReadTableResults(dbCommand);
-                }
+                case DatabaseConnection.EConnectionType.SQLite:
+                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                    {
+                        connection.Open();
+                        using (var dbCommand = connection.CreateCommand())
+                        {
+                            dbCommand.CommandText = query;
+                            ReadTableResults(dbCommand);
+                        }
+                    }
+                    break;
+                case DatabaseConnection.EConnectionType.MySQL:
+                    using (var connection = new MySqlConnection(database.ConnectionString))
+                    {
+                        connection.Open();
+                        using (var dbCommand = connection.CreateCommand())
+                        {
+                            dbCommand.CommandText = query;
+                            ReadTableResults(dbCommand);
+                        }
+                    }
+                    break;
+                    
             }
-
+            
             sqlExecutionMessage = "Search executed successfully.";
         }
         catch (Exception ex)
@@ -1384,7 +1404,10 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
+        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+            ? database.GetTableColumns_Maria(selectedTableForContent)
+            : database.GetTableColumns_Lite(selectedTableForContent);
+        
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
