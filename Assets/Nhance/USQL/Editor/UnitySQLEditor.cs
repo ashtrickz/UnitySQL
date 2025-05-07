@@ -1,12 +1,18 @@
 using System;
+using System.Collections;
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Data;
 using MySqlConnector;
 using System.Linq;
+using System.Text;
 using Mono.Data.Sqlite;
+using Nhance.USQL.AI;
+using UnityEngine.Networking;
 using Object = UnityEngine.Object;
+using Unity.EditorCoroutines.Editor;
+using Unity.Plastic.Newtonsoft.Json;
 
 public class UnitySQLManager : EditorWindow
 {
@@ -86,6 +92,28 @@ public class UnitySQLManager : EditorWindow
     private string remoteSSLMode = "None";
 
 
+    private enum SQLMode
+    {
+        Manual,
+        AIPowered
+    }
+
+    private SQLMode currentMode = SQLMode.Manual;
+    private string aiPrompt = "";
+    private string aiResponse = "";
+    private List<List<string>> aiTableData = new List<List<string>>();
+
+    private const string openAIApiKey = "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"; // <-- сюда вставь свой ключ
+    private const string openAIEndpoint = "https://api.openai.com/v1/chat/completions";
+
+    private IAIProvider aiProvider;
+    private string aiApiKey = "sk-..."; 
+
+    private void OnEnable()
+    {
+        InitializeProviders();
+    }
+    
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
@@ -587,10 +615,10 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
             ? database.GetTableColumns_Maria(selectedTableForContent)
             : database.GetTableColumns_Lite(selectedTableForContent);
-        
+
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
@@ -685,6 +713,7 @@ public class UnitySQLManager : EditorWindow
                             ReadTableResults(dbCommand);
                         }
                     }
+
                     break;
                 case DatabaseConnection.EConnectionType.MySQL:
                     using (var connection = new MySqlConnection(database.ConnectionString))
@@ -696,10 +725,10 @@ public class UnitySQLManager : EditorWindow
                             ReadTableResults(dbCommand);
                         }
                     }
+
                     break;
-                    
             }
-            
+
             sqlExecutionMessage = "Search executed successfully.";
         }
         catch (Exception ex)
@@ -1259,6 +1288,25 @@ public class UnitySQLManager : EditorWindow
     private void DrawSQLExecutor()
     {
         EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);
+
+        // Mode selection toolbar
+        currentMode = (SQLMode) GUILayout.Toolbar((int) currentMode, new[] {"Manual", "AI Powered"});
+        GUILayout.Space(10);
+
+        switch (currentMode)
+        {
+            case SQLMode.Manual:
+                DrawManualMode();
+                break;
+
+            case SQLMode.AIPowered:
+                DrawAIPoweredMode();
+                break;
+        }
+    }
+
+    private void DrawManualMode()
+    {
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
@@ -1276,18 +1324,216 @@ public class UnitySQLManager : EditorWindow
         EditorGUILayout.EndHorizontal();
         GUILayout.Space(5);
 
-        // Display execution messages (errors or success)
         if (!string.IsNullOrEmpty(sqlExecutionMessage))
         {
             EditorGUILayout.HelpBox(sqlExecutionMessage, MessageType.Info);
         }
 
-        // Display table results
         if (tableData.Count > 0)
         {
             DrawQueryResults();
         }
     }
+
+    private void DrawAIPoweredMode()
+    {
+        EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
+
+        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex, aiProviders.Select(p => p.Name).ToArray());
+        aiProvider = aiProviders[selectedAIProviderIndex];
+        
+        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt);
+
+        provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
+
+        string dataContext = "";
+        if (provideDatabaseData)
+        {
+            provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
+
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            if (!provideEntireDatabase)
+            {
+                if (tableNames.Count == 0)
+                    tableNames = GetTableNames(database);
+
+                selectedTableIndex = EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
+            }
+
+            dataContext = provideEntireDatabase
+                ? GetDatabaseDataAsJson(database)
+                : GetTableDataAsJson(database, tableNames[selectedTableIndex]);
+        }
+
+        GUILayout.Space(5);
+        if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
+        {
+            string fullSystemPrompt = systemPrompt;
+
+            if (provideDatabaseData && !string.IsNullOrEmpty(dataContext))
+            {
+                fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
+            }
+
+            aiResponse = "Thinking...";
+            aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
+            {
+                aiResponse = response;
+                Repaint();
+            });
+        }
+
+        GUILayout.Space(5);
+        if (!string.IsNullOrEmpty(aiResponse))
+        {
+            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
+            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
+        }
+    }
+
+
+    private List<string> GetTableNames(Database database)
+    {
+        var names = new List<string>();
+        switch (database.ConnectionType)
+        {
+            case DatabaseConnection.EConnectionType.SQLite:
+                using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                {
+                    connection.Open();
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            names.Add(reader.GetString(0));
+                        }
+                    }
+                }
+                break;
+            case DatabaseConnection.EConnectionType.MySQL:
+                using (var connection = new SqliteConnection(database.ConnectionString))
+                {
+                    connection.Open();
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            names.Add(reader.GetString(0));
+                        }
+                    }
+                }
+                break;
+        }
+        
+        return names;
+    }
+
+    private string GetTableDataAsJson(Database database, string tableName)
+    {
+        var rows = new List<Dictionary<string, object>>();
+
+        switch (database.ConnectionType)
+        {
+            case DatabaseConnection.EConnectionType.SQLite:
+                using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                {
+                    connection.Open();
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var row = new Dictionary<string, object>();
+                            for (int i = 0; i < reader.FieldCount; i++)
+                            {
+                                object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                row[reader.GetName(i)] = value;
+                            }
+                            rows.Add(row);
+                        }
+                    }
+                }
+                break;
+            case DatabaseConnection.EConnectionType.MySQL:
+                using (var connection = new MySqlConnection(database.ConnectionString))
+                {
+                    connection.Open();
+                    var cmd = connection.CreateCommand();
+                    cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            var row = new Dictionary<string, object>();
+                            for (int i = 0; i < reader.FieldCount; i++)
+                            {
+                                object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                row[reader.GetName(i)] = value;
+                            }
+                            rows.Add(row);
+                        }
+                    }
+                }
+                break;
+        }
+        
+        var wrapper = new
+        {
+            table = tableName,
+            rows
+        };
+
+        return JsonConvert.SerializeObject(wrapper, Formatting.Indented);
+    }
+
+    private string GetDatabaseDataAsJson(Database database)
+    {
+        var output = new List<string>();
+        foreach (var table in GetTableNames(database))
+        {
+            output.Add(GetTableDataAsJson(database, table));
+        }
+        return "[" + string.Join(",", output) + "]";
+    }
+
+    [System.Serializable]
+    private class TableWrapper
+    {
+        public string table;
+        public List<Dictionary<string, object>> data;
+    }
+
+    
+    private void DrawTable(List<List<string>> table)
+    {
+        if (table.Count == 0) return;
+
+        EditorGUILayout.BeginVertical("box");
+        foreach (var row in table)
+        {
+            EditorGUILayout.BeginHorizontal();
+            foreach (var cell in row)
+            {
+                EditorGUILayout.LabelField(cell, GUILayout.MinWidth(100));
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
 
     private void ExecuteSQLQuery(Database database)
     {
@@ -1404,10 +1650,10 @@ public class UnitySQLManager : EditorWindow
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
 
-        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
             ? database.GetTableColumns_Maria(selectedTableForContent)
             : database.GetTableColumns_Lite(selectedTableForContent);
-        
+
         if (columns == null || columns.Count == 0)
         {
             EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
@@ -1583,16 +1829,6 @@ public class UnitySQLManager : EditorWindow
         Debug.Log("Changes saved successfully!");
     }
 
-    // private void AddNewConnection()
-    // {
-    //     string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
-    //     if (!string.IsNullOrEmpty(path))
-    //     {
-    //         connections.Add(new DatabaseConnection(path));
-    //         SaveSessionData(); // Save immediately after adding a new connection
-    //     }
-    // }
-
     private Texture2D MakeTex(int width, int height, Color col)
     {
         Texture2D result = new Texture2D(width, height);
@@ -1760,5 +1996,26 @@ public class UnitySQLManager : EditorWindow
                 database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
                 break;
         }
+    }
+    
+    private bool provideDatabaseData = false;
+    private bool provideEntireDatabase = true;
+    private int selectedTableIndex = 0;
+    private List<string> tableNames = new List<string>(); // обновляется при выборе БД
+
+    private List<IAIProvider> aiProviders;
+    private int selectedAIProviderIndex = 0;
+
+    private string systemPrompt = "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
+    
+    private void InitializeProviders()
+    {
+        aiProviders = new List<IAIProvider>
+        {
+            new OpenAIProvider(aiApiKey),
+            new GroqAIProvider(aiApiKey),
+            new DeepSeekAIProvider(aiApiKey),
+            new NvidiaAIProvider(aiApiKey)
+        };
     }
 }
