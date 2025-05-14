@@ -39,7 +39,7 @@ public class UnitySQLManager : EditorWindow
         "Sprite",
         "Vector2",
         "Vector3"
-    }; // Available column types
+    }; 
 
     private readonly string[] availableOperators =
     {
@@ -90,8 +90,7 @@ public class UnitySQLManager : EditorWindow
     private string remoteUserID = "";
     private string remotePassword = "";
     private string remoteSSLMode = "None";
-
-
+    
     private enum SQLMode
     {
         Manual,
@@ -101,19 +100,20 @@ public class UnitySQLManager : EditorWindow
     private SQLMode currentMode = SQLMode.Manual;
     private string aiPrompt = "";
     private string aiResponse = "";
-    private List<List<string>> aiTableData = new List<List<string>>();
-
-    private const string openAIApiKey = "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"; // <-- сюда вставь свой ключ
-    private const string openAIEndpoint = "https://api.openai.com/v1/chat/completions";
 
     private IAIProvider aiProvider;
-    private string aiApiKey = "sk-..."; 
+    private string aiApiKey = "sk-...";
+    private List<string> selectedTableNames = new List<string>();
+
 
     private void OnEnable()
     {
+        if (EditorPrefs.HasKey("UnitySQL_AIKey"))
+            aiApiKey = EditorPrefs.GetString("UnitySQL_AIKey");
+        
         InitializeProviders();
     }
-    
+
     [MenuItem("Nhance/Tools/UnitySQL Manager")]
     public static void ShowWindow()
     {
@@ -1285,27 +1285,228 @@ public class UnitySQLManager : EditorWindow
         database.LoadTableContent(tableName);
     }
 
+    private bool showAISettings = false;
+
     private void DrawSQLExecutor()
     {
         EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);
 
-        // Mode selection toolbar
-        currentMode = (SQLMode) GUILayout.Toolbar((int) currentMode, new[] {"Manual", "AI Powered"});
+        DrawSQLExecutor_ModeSelection();
+
         GUILayout.Space(10);
 
+        EditorGUILayout.BeginHorizontal();
+
+        // Left side: Mode-specific UI
+        EditorGUILayout.BeginVertical();
         switch (currentMode)
         {
             case SQLMode.Manual:
-                DrawManualMode();
+                DrawSQLExecutorManualMode();
                 break;
-
             case SQLMode.AIPowered:
-                DrawAIPoweredMode();
+                
+                DrawSQLExecutorAISettings();
+                
+                GUILayout.Space(10);
+                
+                DrawSQLExecutorAIPrompt();
                 break;
+        }
+
+        EditorGUILayout.EndVertical();
+        // Right side: Settings panel for AI
+
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawSQLExecutorAISettings()
+    {
+        EditorGUILayout.BeginVertical(GUILayout.Width(500));
+
+        showAISettings = EditorGUILayout.Foldout(showAISettings, "⚙ AI Settings", true,
+            new GUIStyle(EditorStyles.foldout) {fontStyle = FontStyle.Bold});
+
+        if (showAISettings)
+        {
+            EditorGUILayout.BeginVertical("box");
+            DrawAISettingsPanel();
+            EditorGUILayout.EndVertical();
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawSQLExecutorAIPrompt()
+    {
+        EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
+        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
+
+        GUILayout.Space(5);
+        if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
+        {
+            string dataContext = "";
+
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            if (provideDatabaseData)
+            {
+                dataContext = provideEntireDatabase
+                    ? GetDatabaseDataAsJson(database)
+                    : GetMultipleTablesDataAsJson(database, selectedTableNames);
+            }
+
+            string fullSystemPrompt = systemPrompt;
+
+            if (!string.IsNullOrEmpty(dataContext))
+                fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
+
+            aiResponse = "Thinking...";
+            aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
+            {
+                aiResponse = response;
+
+                // Извлекаем SQL из markdown блока ```sql ... ```
+                string extracted = ExtractSQLFromMarkdown(response);
+                if (!string.IsNullOrEmpty(extracted))
+                {
+                    var connection = connections[selectedConnectionIndex];
+                    var database = connection.Databases[selectedDatabaseIndex];
+                    database.SQLQuery = extracted.Trim();
+                    currentMode = SQLMode.Manual;
+                }
+
+                Repaint();
+            });
+
+        }
+
+        GUILayout.Space(5);
+        if (!string.IsNullOrEmpty(aiResponse))
+        {
+            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
+            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
         }
     }
 
-    private void DrawManualMode()
+    private string ExtractSQLFromMarkdown(string response)
+    {
+        const string startTag = "```sql";
+        const string endTag = "```";
+
+        int start = response.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+        if (start == -1) return null;
+
+        start += startTag.Length;
+        int end = response.IndexOf(endTag, start, StringComparison.OrdinalIgnoreCase);
+        if (end == -1) return null;
+
+        return response.Substring(start, end - start).Trim();
+    }
+
+    
+    private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
+    {
+        var output = new List<string>();
+        foreach (var table in tables)
+        {
+            output.Add(GetTableDataAsJson(database, table));
+        }
+
+        return "[" + string.Join(",", output) + "]";
+    }
+
+
+    private void DrawAISettingsPanel()
+    {
+        EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
+
+        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
+            aiProviders.Select(p => p.Name).ToArray());
+        aiProvider = aiProviders[selectedAIProviderIndex];
+
+        provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
+
+        if (provideDatabaseData)
+        {
+            provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
+
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            if (!provideEntireDatabase)
+            {
+                if (tableNames.Count == 0)
+                    tableNames = GetTableNames(database);
+
+                EditorGUILayout.LabelField("Select Tables to Send:", EditorStyles.boldLabel);
+
+                for (int i = 0; i < tableNames.Count; i++)
+                {
+                    bool selected = selectedTableNames.Contains(tableNames[i]);
+                    bool toggle = EditorGUILayout.ToggleLeft(tableNames[i], selected);
+
+                    if (toggle && !selected)
+                        selectedTableNames.Add(tableNames[i]);
+                    else if (!toggle && selected)
+                        selectedTableNames.Remove(tableNames[i]);
+                }
+            }
+            else
+            {
+                EditorGUILayout.LabelField("Providing Entire Database can cost sufficient Token Waste so proceed with understanding of your actions!",
+                    EditorStyles.helpBox);
+            }
+
+        }
+
+        var newKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey);
+        if (newKey == aiApiKey) return;
+        
+        aiApiKey = newKey;
+        EditorPrefs.SetString("UnitySQL_AIKey", aiApiKey);
+
+    }
+
+
+    private void DrawSQLExecutor_ModeSelection()
+    {
+        var searchModes = new[] {"Manual", "AI Powered"};
+        currentMode =
+            (SQLMode) GUILayout.Toolbar((int) currentMode, searchModes, GUILayout.Width(0), GUILayout.Height(0));
+
+        EditorGUILayout.BeginHorizontal();
+
+        for (var index = 0; index < searchModes.Length; index++)
+        {
+            var tab = searchModes[index];
+            var backColor = GUI.backgroundColor;
+            var style = new GUIStyle(GUI.skin.button)
+            {
+                fontStyle = FontStyle.Bold,
+                normal =
+                {
+                    textColor = Color.white
+                }
+            };
+
+            if ((int) currentMode == index) GUI.backgroundColor = Color.cyan;
+
+            if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
+                currentMode = (SQLMode) index;
+
+            GUI.backgroundColor = backColor;
+
+            if (index == tabs.Length - 1) continue;
+            GUILayout.Space(10);
+        }
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawSQLExecutorManualMode()
     {
         var connection = connections[selectedConnectionIndex];
         var database = connection.Databases[selectedDatabaseIndex];
@@ -1339,10 +1540,11 @@ public class UnitySQLManager : EditorWindow
     {
         EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
 
-        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex, aiProviders.Select(p => p.Name).ToArray());
+        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
+            aiProviders.Select(p => p.Name).ToArray(), GUILayout.Width(300));
         aiProvider = aiProviders[selectedAIProviderIndex];
-        
-        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt);
+
+        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
 
         provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
 
@@ -1366,6 +1568,10 @@ public class UnitySQLManager : EditorWindow
                 ? GetDatabaseDataAsJson(database)
                 : GetTableDataAsJson(database, tableNames[selectedTableIndex]);
         }
+
+        GUILayout.Space(5);
+
+        aiApiKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey, GUILayout.Width(600));
 
         GUILayout.Space(5);
         if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
@@ -1414,6 +1620,7 @@ public class UnitySQLManager : EditorWindow
                         }
                     }
                 }
+
                 break;
             case DatabaseConnection.EConnectionType.MySQL:
                 using (var connection = new SqliteConnection(database.ConnectionString))
@@ -1430,9 +1637,10 @@ public class UnitySQLManager : EditorWindow
                         }
                     }
                 }
+
                 break;
         }
-        
+
         return names;
     }
 
@@ -1459,10 +1667,12 @@ public class UnitySQLManager : EditorWindow
                                 object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
                                 row[reader.GetName(i)] = value;
                             }
+
                             rows.Add(row);
                         }
                     }
                 }
+
                 break;
             case DatabaseConnection.EConnectionType.MySQL:
                 using (var connection = new MySqlConnection(database.ConnectionString))
@@ -1481,13 +1691,15 @@ public class UnitySQLManager : EditorWindow
                                 object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
                                 row[reader.GetName(i)] = value;
                             }
+
                             rows.Add(row);
                         }
                     }
                 }
+
                 break;
         }
-        
+
         var wrapper = new
         {
             table = tableName,
@@ -1504,6 +1716,7 @@ public class UnitySQLManager : EditorWindow
         {
             output.Add(GetTableDataAsJson(database, table));
         }
+
         return "[" + string.Join(",", output) + "]";
     }
 
@@ -1514,7 +1727,7 @@ public class UnitySQLManager : EditorWindow
         public List<Dictionary<string, object>> data;
     }
 
-    
+
     private void DrawTable(List<List<string>> table)
     {
         if (table.Count == 0) return;
@@ -1997,7 +2210,7 @@ public class UnitySQLManager : EditorWindow
                 break;
         }
     }
-    
+
     private bool provideDatabaseData = false;
     private bool provideEntireDatabase = true;
     private int selectedTableIndex = 0;
@@ -2006,8 +2219,9 @@ public class UnitySQLManager : EditorWindow
     private List<IAIProvider> aiProviders;
     private int selectedAIProviderIndex = 0;
 
-    private string systemPrompt = "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
-    
+    private string systemPrompt =
+        "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
+
     private void InitializeProviders()
     {
         aiProviders = new List<IAIProvider>
