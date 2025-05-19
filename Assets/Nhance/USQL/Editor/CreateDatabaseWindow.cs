@@ -1,13 +1,14 @@
+using Nhance.USQL.Editor;
 using UnityEditor;
 using UnityEngine;
 
 public class CreateDatabaseWindow : EditorWindow
 {
-    private static UnitySQLManager manager;
+    private static UnitySqlManager manager;
     private static DatabaseConnection connection;
     private static string databaseName = "";
 
-    public static void ShowWindow(UnitySQLManager mgr, DatabaseConnection conn)
+    public static void ShowWindow(UnitySqlManager mgr, DatabaseConnection conn)
     {
         manager = mgr;
         connection = conn;

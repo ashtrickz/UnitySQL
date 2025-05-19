@@ -1,16 +1,17 @@
+using Nhance.USQL.Editor;
 using UnityEditor;
 using UnityEngine;
 
 public class AddColumnWindow : EditorWindow
 {
-    private static UnitySQLManager manager;
+    private static UnitySqlManager manager;
     private static string tableName;
     private static string columnName = "";
     private static int selectedTypeIndex = 0;
     
     private static readonly string[] columnTypes = { "TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3" };
 
-    public static void ShowWindow(UnitySQLManager mgr, string tblName)
+    public static void ShowWindow(UnitySqlManager mgr, string tblName)
     {
         manager = mgr;
         tableName = tblName;

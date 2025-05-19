@@ -1,17 +1,18 @@
 using UnityEditor;
 using UnityEngine;
 using System.Collections.Generic;
+using Nhance.USQL.Editor;
 
 public class DuplicateRowWindow : EditorWindow
 {
-    private static UnitySQLManager manager;
+    private static UnitySqlManager manager;
     private static string tableName;
     private static Dictionary<string, object> originalRow;
     private static Dictionary<string, object> editedRow;
     private static string primaryKeyColumn;
     private static Database database;
 
-    public static void ShowWindow(UnitySQLManager mgr, string tblName, Dictionary<string, object> row, string primaryKey, Database db)
+    public static void ShowWindow(UnitySqlManager mgr, string tblName, Dictionary<string, object> row, string primaryKey, Database db)
     {
         manager = mgr;
         tableName = tblName;

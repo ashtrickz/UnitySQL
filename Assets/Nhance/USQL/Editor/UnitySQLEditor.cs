@@ -1,338 +1,352 @@
 using System;
-using UnityEditor;
-using UnityEngine;
 using System.Collections.Generic;
 using System.Data;
-using MySqlConnector;
 using System.Linq;
 using Mono.Data.Sqlite;
+using MySqlConnector;
 using Nhance.USQL.AI;
-using Object = UnityEngine.Object;
 using Unity.Plastic.Newtonsoft.Json;
+using UnityEditor;
+using UnityEngine;
+using Object = UnityEngine.Object;
 
-public class UnitySQLManager : EditorWindow
+namespace Nhance.USQL.Editor
 {
-    private List<DatabaseConnection> connections = new List<DatabaseConnection>();
-    private int selectedConnectionIndex = -1;
-    private int selectedDatabaseIndex = -1;
-    private int selectedTab = 0;
-
-    private readonly string[] _tabs = {"Overview", "Structure", "Search", "SQL"};
-    private readonly string[] _availableColumnTypes = {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
-    private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
-
-    private int currentPage = 0;
-    private const int rowsPerPage = 10;
-
-    private string selectedTableForContent = "";
-    private Vector2 scrollPosition;
-
-    private const string SaveKey = "UnitySQLManager_SaveData";
-
-    // SQL Tab
-
-    private List<string[]> tableData = new List<string[]>(); // Stores query results
-    private string[] columnNames = new string[0];
-    private string sqlExecutionMessage = "";
-    private Vector2 sqlScrollPosition;
-
-    private string searchQuery = "";
-
-    private bool showAddConnectionForm = false;
-
-    private enum EConnectionType
+    public class UnitySqlManager : EditorWindow
     {
-        Local,
-        Remote
-    }
-
-    private EConnectionType selectedConnectionType = EConnectionType.Local;
-
-// Local
-    private string localDatabasePath = "";
-
-// Remote
-    private string remoteServerAddress = "127.0.0.1";
-    private string remoteDatabaseName = "";
-    private string remoteUserID = "";
-    private string remotePassword = "";
-    private string remoteSSLMode = "None";
-
-    private enum SQLMode
-    {
-        Manual,
-        AIPowered
-    }
-
-    private SQLMode currentMode = SQLMode.Manual;
-    private string aiPrompt = "";
-    private string aiResponse = "";
-
-    private IAIProvider aiProvider;
-    private string aiApiKey = "sk-...";
-    private List<string> selectedTableNames = new List<string>();
-
-    [MenuItem("Nhance/Tools/UnitySQL Manager")]
-    public static void ShowWindow()
-    {
-        var window = GetWindow<UnitySQLManager>("Nhance Unity SQL Manager");
-        window.LoadSessionData();
-    }
-
-    private void OnGUI()
-    {
-        EditorGUILayout.BeginHorizontal();
-
-        // Left Panel
-        DrawConnectionsPanel(); // No layout troubles
-
-        // Right Panel
-        DrawRightPanel();
-
-        EditorGUILayout.EndHorizontal();
-    }
-
-    #region Left Panel
-
-    private void DrawConnectionsPanel()
-    {
-        EditorGUILayout.BeginVertical(GUILayout.Width(200));
-
-        EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
-
-        DrawSearchBar();
-
-        DrawConnections();
-
-        EditorGUILayout.Space();
-
-        DrawAddConnectionButton();
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void DrawSearchBar()
-    {
-        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-
-        searchQuery = EditorGUILayout.TextField(
-            searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
-
-        if (GUILayout.Button("X", EditorStyles.toolbarButton, GUILayout.Width(20)))
-            searchQuery = "";
-
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private void DrawAddConnectionButton()
-    {
-        EditorGUILayout.BeginHorizontal();
-
-        GUILayout.FlexibleSpace();
-
-        if (GUILayout.Button("Add Connection", GUILayout.Width(150), GUILayout.Height(25)))
-            showAddConnectionForm = !showAddConnectionForm;
-
-        GUILayout.FlexibleSpace();
-
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private void DrawConnections()
-    {
-        for (var i = 0; i < connections.Count; i++)
+        private enum EConnectionType
         {
-            var connection = connections[i];
-            var connectionMatches = string.IsNullOrEmpty(searchQuery) ||
-                                    connection.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0;
+            Local,
+            Remote
+        }
 
-            var anyDatabaseMatches = connection.Databases.Any(db =>
-                string.IsNullOrEmpty(searchQuery) ||
-                db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                db.Tables.Any(table => table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)
-            );
+        private enum EsqlMode
+        {
+            Manual,
+            AIPowered
+        }
+    
+        private EConnectionType selectedConnectionType = EConnectionType.Local;
+        private EsqlMode currentMode = EsqlMode.Manual;
+    
+        private const int RowsPerPage = 10;
+        private const string SaveKey = "UnitySQLManager_SaveData";
+    
+        private readonly string[] tabs = {"Overview", "Structure", "Search", "SQL"};
+        private readonly string[] availableColumnTypes = {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
+        private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
+    
+        private int selectedConnectionIndex = -1;
+        private int selectedDatabaseIndex = -1;
+        private int selectedTab = 0;
+        private int currentPage = 0;
+        private int selectedTableIndex = 0;
+        private int selectedAIProviderIndex = 0;
+        
+        private string searchQuery = "";
+        private string sqlExecutionMessage = "";
+        private string selectedTableForContent = "";
+        // Local connection
+        private string localDatabasePath = "";
+        // Remote connection
+        private string remoteServerAddress = "127.0.0.1";
+        private string remoteDatabaseName = "";
+        private string remoteUserID = "";
+        private string remotePassword = "";
+        private string remoteSSLMode = "None";
+        // AI
+        private string aiPrompt = "";
+        private string aiResponse = "";
+        private string aiApiKey = "sk-...";
+        private string systemPrompt =
+            "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
 
-            if (!connectionMatches && !anyDatabaseMatches)
-                continue;
+        private string[] columnNames = new string[0];
+    
+        private bool showAddConnectionForm = false;
+        private bool selectAllTables = false;
+        private bool selectAllColumns = false;
+        private bool provideDatabaseData = false;
+        private bool provideEntireDatabase = true;
 
-            if (!connectionStates.ContainsKey(connection))
-                connectionStates[connection] = false;
+        private Vector2 scrollPosition;
+        private Vector2 sqlScrollPosition;
 
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Space(5);
+        private List<int> selectedColumnTypeIndices = new List<int>();
+        private List<bool> tableSelections = new List<bool>();
+        private List<bool> editedPrimaryKeys = new List<bool>();
+        private List<bool> columnSelections = new List<bool>();
+        private List<string> tableNames = new List<string>();
+        private List<string> selectedTableNames = new List<string>();
+        private List<string> editedColumnNames = new List<string>();
+        private List<string[]> tableData = new List<string[]>();
+        private List<DatabaseConnection> connections = new List<DatabaseConnection>();
+        private List<SearchFilter> searchFilters = new List<SearchFilter>();
+        private List<IAIProvider> aiProviders;
+
+        private Dictionary<DatabaseConnection, bool> connectionStates = new Dictionary<DatabaseConnection, bool>();
+        private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
+        
+        private IAIProvider aiProvider;
+    
+        private void OnEnable()
+        {
+            if (EditorPrefs.HasKey("UnitySQL_AIKey"))
+                aiApiKey = EditorPrefs.GetString("UnitySQL_AIKey");
+
+            InitializeProviders();
+        }
+        
+        [MenuItem("Nhance/Tools/UnitySQL Manager")]
+        public static void ShowWindow()
+        {
+            var window = GetWindow<UnitySqlManager>("Nhance Unity SQL Manager");
+            window.LoadSessionData();
+        }
+
+        private void OnGUI()
+        {
             EditorGUILayout.BeginHorizontal();
 
-            bool isConnectionExpanded = connectionStates[connection];
-            string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+            // Left Panel
+            DrawConnectionsPanel();
 
-            if (GUILayout.Button($" {connectionArrow} {connection.Name} connection", EditorStyles.boldLabel))
-            {
-                connectionStates[connection] = !isConnectionExpanded;
-                SaveSessionData();
-            }
-
-            if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                OpenCreateDatabaseWindow(connection);
-
-            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                OpenDeleteConnectionWindow(connection);
+            // Right Panel
+            DrawWorkPanel();
 
             EditorGUILayout.EndHorizontal();
+        }
 
-            if (isConnectionExpanded)
-                DrawDatabases(connection, i);
+        #region Left Panel
+
+        private void DrawConnectionsPanel()
+        {
+            EditorGUILayout.BeginVertical(GUILayout.Width(200));
+
+            EditorGUILayout.LabelField("Connections", EditorStyles.boldLabel);
+
+            DrawSearchBar();
+
+            DrawConnections();
+
+            EditorGUILayout.Space();
+
+            DrawAddConnectionButton();
 
             EditorGUILayout.EndVertical();
         }
-    }
 
-    private void DrawDatabases(DatabaseConnection connection, int i)
-    {
-        var consoleBackground = GetBackgroundTexture(new Color(.1f, .1f, .1f, 1));
-        var containerStyle = GetHierarchyStyle(consoleBackground);
-
-        foreach (var database in connection.Databases.Where(db =>
-            string.IsNullOrEmpty(searchQuery) ||
-            db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
-            db.Tables.Any(table =>
-                table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)))
+        private void DrawSearchBar()
         {
-            if (!databaseStates.ContainsKey(database))
-                databaseStates[database] = false;
+            EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
-            var isDatabaseExpanded = databaseStates[database];
-            var databaseArrow = isDatabaseExpanded ? "▼" : "▶";
+            searchQuery = EditorGUILayout.TextField(
+                searchQuery, EditorStyles.toolbarTextField, GUILayout.ExpandWidth(true));
 
-            EditorGUILayout.BeginVertical(containerStyle);
+            if (GUILayout.Button("X", EditorStyles.toolbarButton, GUILayout.Width(20)))
+                searchQuery = "";
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawAddConnectionButton()
+        {
             EditorGUILayout.BeginHorizontal();
+
+            GUILayout.FlexibleSpace();
+
+            if (GUILayout.Button("Add Connection", GUILayout.Width(150), GUILayout.Height(25)))
+                showAddConnectionForm = !showAddConnectionForm;
+
+            GUILayout.FlexibleSpace();
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawConnections()
+        {
+            for (var i = 0; i < connections.Count; i++)
+            {
+                var connection = connections[i];
+                var connectionMatches = string.IsNullOrEmpty(searchQuery) ||
+                                        connection.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                var anyDatabaseMatches = connection.Databases.Any(db =>
+                    string.IsNullOrEmpty(searchQuery) ||
+                    db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    db.Tables.Any(table => table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)
+                );
+
+                if (!connectionMatches && !anyDatabaseMatches)
+                    continue;
+
+                if (!connectionStates.ContainsKey(connection))
+                    connectionStates[connection] = false;
+
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+                GUILayout.Space(5);
+                EditorGUILayout.BeginHorizontal();
+
+                bool isConnectionExpanded = connectionStates[connection];
+                string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+
+                if (GUILayout.Button($" {connectionArrow} {connection.Name} connection", EditorStyles.boldLabel))
+                {
+                    connectionStates[connection] = !isConnectionExpanded;
+                    SaveSessionData();
+                }
+
+                if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
+                    OpenCreateDatabaseWindow(connection);
+
+                if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
+                    OpenDeleteConnectionWindow(connection);
+
+                EditorGUILayout.EndHorizontal();
+
+                if (isConnectionExpanded)
+                    DrawDatabases(connection, i);
+
+                EditorGUILayout.EndVertical();
+            }
+        }
+
+        private void DrawDatabases(DatabaseConnection connection, int i)
+        {
+            var consoleBackground = GetBackgroundTexture(new Color(.1f, .1f, .1f, 1));
+            var containerStyle = GetHierarchyStyle(consoleBackground);
+
+            foreach (var database in connection.Databases.Where(db =>
+                string.IsNullOrEmpty(searchQuery) ||
+                db.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                db.Tables.Any(table =>
+                    table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0)))
+            {
+                if (!databaseStates.ContainsKey(database))
+                    databaseStates[database] = false;
+
+                var isDatabaseExpanded = databaseStates[database];
+                var databaseArrow = isDatabaseExpanded ? "▼" : "▶";
+
+                EditorGUILayout.BeginVertical(containerStyle);
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Space(15);
+
+                if (GUILayout.Button($" {databaseArrow}", EditorStyles.boldLabel, GUILayout.Width(15)))
+                {
+                    databaseStates[database] = !isDatabaseExpanded;
+                    selectedDatabaseIndex = connection.Databases.IndexOf(database);
+                    selectedConnectionIndex = i;
+                    SaveSessionData();
+                }
+
+                if (GUILayout.Button($" {database.Name}", EditorStyles.boldLabel, GUILayout.ExpandWidth(true)))
+                {
+                    selectedTab = 0;
+                    selectedDatabaseIndex = connection.Databases.IndexOf(database);
+                    selectedConnectionIndex = i;
+                    selectedTableForContent = null;
+                    SaveSessionData();
+                }
+
+                if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
+                    OpenCreateTableWindow(database);
+
+                if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
+                    OpenDeleteDatabaseWindow(connection, database);
+
+                EditorGUILayout.EndHorizontal();
+
+                if (isDatabaseExpanded)
+                {
+                    foreach (var table in database.Tables.Where(table =>
+                        string.IsNullOrEmpty(searchQuery) ||
+                        table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        DrawTable(database, table);
+                    }
+                }
+
+                EditorGUILayout.EndVertical();
+            }
+        }
+
+        private void DrawTable(Database database, Table table)
+        {
+            EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel, GUILayout.Height(2));
+
             GUILayout.Space(15);
-
-            if (GUILayout.Button($" {databaseArrow}", EditorStyles.boldLabel, GUILayout.Width(15)))
-            {
-                databaseStates[database] = !isDatabaseExpanded;
-                selectedDatabaseIndex = connection.Databases.IndexOf(database);
-                selectedConnectionIndex = i;
-                SaveSessionData();
-            }
-
-            if (GUILayout.Button($" {database.Name}", EditorStyles.boldLabel, GUILayout.ExpandWidth(true)))
-            {
-                selectedTab = 0;
-                selectedDatabaseIndex = connection.Databases.IndexOf(database);
-                selectedConnectionIndex = i;
-                selectedTableForContent = null;
-                SaveSessionData();
-            }
-
-            if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                OpenCreateTableWindow(database);
-
-            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                OpenDeleteDatabaseWindow(connection, database);
+            GUILayout.Button("", GUILayout.ExpandWidth(true), GUILayout.Height(2));
 
             EditorGUILayout.EndHorizontal();
 
-            if (isDatabaseExpanded)
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Space(30);
+
+            if (GUILayout.Button($" • {table.Name}", EditorStyles.boldLabel))
             {
-                foreach (var table in database.Tables.Where(table =>
-                    string.IsNullOrEmpty(searchQuery) ||
-                    table.Name.IndexOf(searchQuery, StringComparison.OrdinalIgnoreCase) >= 0))
+                selectedTab = 0;
+                selectedTableForContent = table.Name;
+                database.LoadTableContent(selectedTableForContent);
+                SaveSessionData();
+            
+                if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25),
+                    GUILayout.Height(20)))
                 {
-                    DrawTable(database, table);
+                    OpenDeleteTableWindow(database, table.Name);
                 }
             }
 
-            EditorGUILayout.EndVertical();
+            EditorGUILayout.EndHorizontal();
         }
-    }
 
-    private void DrawTable(Database database, Table table)
-    {
-        EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel, GUILayout.Height(2));
-
-        GUILayout.Space(15);
-        GUILayout.Button("", GUILayout.ExpandWidth(true), GUILayout.Height(2));
-
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Space(30);
-
-        if (GUILayout.Button($" • {table.Name}", EditorStyles.boldLabel))
+        private Texture2D GetBackgroundTexture(Color color)
         {
-            selectedTab = 0;
-            selectedTableForContent = table.Name;
-            database.LoadTableContent(selectedTableForContent);
-            SaveSessionData();
+            var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false);
+            backgroundTexture.SetPixel(0, 0, color);
+            backgroundTexture.Apply();
 
-            // **"X" Button to Remove Table**
-            if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25),
-                GUILayout.Height(20)))
+            return backgroundTexture;
+        }
+
+        private GUIStyle GetHierarchyStyle(Texture2D consoleBackground)
+        {
+            return new GUIStyle("box")
             {
-                OpenDeleteTableWindow(database, table.Name);
+                padding = new RectOffset(5, 5, 5, 5),
+                margin = new RectOffset(5, 5, 5, 5),
+                fontStyle = FontStyle.Normal,
+                normal =
+                {
+                    background = consoleBackground,
+                    textColor = Color.white
+                }
+            };
+        }
+
+        #endregion
+        
+        #region WindowData Handling
+
+        public void SaveSessionData()
+        {
+            var saveData = new SaveData
+            {
+                Connections = connections.Select(conn => conn.Path).ToList(),
+                ExpandedConnections = new List<KeyValuePairStringBool>()
+            };
+
+            foreach (var pair in connectionStates)
+            {
+                saveData.ExpandedConnections.Add(new KeyValuePairStringBool {Key = pair.Key.Path, Value = pair.Value});
             }
-        }
 
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private Texture2D GetBackgroundTexture(Color color)
-    {
-        var backgroundTexture = new Texture2D(1, 1, TextureFormat.RGBAFloat, false);
-        backgroundTexture.SetPixel(0, 0, color);
-        backgroundTexture.Apply();
-
-        return backgroundTexture;
-    }
-
-    private GUIStyle GetHierarchyStyle(Texture2D consoleBackground)
-    {
-        return new GUIStyle("box")
-        {
-            padding = new RectOffset(5, 5, 5, 5),
-            margin = new RectOffset(5, 5, 5, 5),
-            fontStyle = FontStyle.Normal,
-            normal =
+            // Store expanded states for databases
+            saveData.ExpandedDatabases = new List<KeyValuePairStringList>();
+            foreach (var connection in connections)
             {
-                background = consoleBackground,
-                textColor = Color.white
-            }
-        };
-    }
-
-    #endregion
-
-    private void OnEnable()
-    {
-        if (EditorPrefs.HasKey("UnitySQL_AIKey"))
-            aiApiKey = EditorPrefs.GetString("UnitySQL_AIKey");
-
-        InitializeProviders();
-    }
-
-    #region WindowData Handling
-
-    public void SaveSessionData()
-    {
-        SaveData saveData = new SaveData();
-
-        // Store connection paths
-        saveData.Connections = connections.Select(conn => conn.Path).ToList();
-
-        // Store expanded states for connections
-        saveData.ExpandedConnections = new List<KeyValuePairStringBool>();
-        foreach (var pair in connectionStates)
-        {
-            saveData.ExpandedConnections.Add(new KeyValuePairStringBool {Key = pair.Key.Path, Value = pair.Value});
-        }
-
-        // Store expanded states for databases
-        saveData.ExpandedDatabases = new List<KeyValuePairStringList>();
-        foreach (var connection in connections)
-        {
-            if (connection.Databases.Count > 0)
-            {
-                List<string> expandedDbs = connection.Databases
+                if (connection.Databases.Count <= 0) continue;
+                var expandedDbs = connection.Databases
                     .Where(db => databaseStates.ContainsKey(db) && databaseStates[db])
                     .Select(db => db.Name)
                     .ToList();
@@ -340,849 +354,784 @@ public class UnitySQLManager : EditorWindow
                 saveData.ExpandedDatabases.Add(
                     new KeyValuePairStringList {Key = connection.Path, Value = expandedDbs});
             }
-        }
-
-        // Store opened tables
-        saveData.OpenedTables = new List<KeyValuePairStringString>();
-        foreach (var connection in connections)
-        {
-            if (saveData.OpenedTables.Any(entry => entry.Key == connection.Path)) continue;
-
-            if (selectedConnectionIndex >= 0 && selectedDatabaseIndex >= 0 &&
-                connections[selectedConnectionIndex] == connection)
+            
+            saveData.OpenedTables = new List<KeyValuePairStringString>();
+            foreach (var connection in connections)
             {
-                if (!string.IsNullOrEmpty(selectedTableForContent))
+                if (saveData.OpenedTables.Any(entry => entry.Key == connection.Path)) continue;
+
+                if (selectedConnectionIndex >= 0 && selectedDatabaseIndex >= 0 &&
+                    connections[selectedConnectionIndex] == connection)
                 {
-                    saveData.OpenedTables.Add(new KeyValuePairStringString
-                        {Key = connection.Path, Value = selectedTableForContent});
-                }
-            }
-        }
-
-        // Convert to JSON and save in EditorPrefs
-        string json = JsonUtility.ToJson(saveData, true);
-        EditorPrefs.SetString(SaveKey, json);
-
-        // Debug.Log($"[DEBUG] Successfully Saved JSON:\n{json}");
-    }
-
-    private void LoadSessionData()
-    {
-        if (!EditorPrefs.HasKey(SaveKey)) return;
-
-        string json = EditorPrefs.GetString(SaveKey);
-        SaveData saveData = JsonUtility.FromJson<SaveData>(json);
-
-        if (saveData?.Connections != null)
-        {
-            foreach (var path in saveData.Connections)
-            {
-                var connection = new DatabaseConnection(path,
-                    path.Contains("SSL")
-                        ? DatabaseConnection.EConnectionType.MySQL
-                        : DatabaseConnection.EConnectionType.SQLite);
-                connections.Add(connection);
-            }
-        }
-
-        // Restore expanded connections
-        connectionStates.Clear();
-        foreach (var pair in saveData.ExpandedConnections)
-        {
-            var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
-            if (connection != null)
-            {
-                connectionStates[connection] = pair.Value;
-            }
-        }
-
-        // Restore expanded databases
-        databaseStates.Clear();
-        foreach (var pair in saveData.ExpandedDatabases)
-        {
-            var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
-            if (connection != null)
-            {
-                foreach (var db in connection.Databases)
-                {
-                    if (pair.Value.Contains(db.Name))
+                    if (!string.IsNullOrEmpty(selectedTableForContent))
                     {
-                        databaseStates[db] = true;
+                        saveData.OpenedTables.Add(new KeyValuePairStringString
+                            {Key = connection.Path, Value = selectedTableForContent});
                     }
                 }
             }
+            
+            var json = JsonUtility.ToJson(saveData, true);
+            EditorPrefs.SetString(SaveKey, json);
         }
 
-        // Restore opened tables
-        if (saveData.OpenedTables.Count > 0)
+        private void LoadSessionData()
         {
-            foreach (var pair in saveData.OpenedTables)
+            if (!EditorPrefs.HasKey(SaveKey)) return;
+
+            var json = EditorPrefs.GetString(SaveKey);
+            var saveData = JsonUtility.FromJson<SaveData>(json);
+
+            if (saveData?.Connections != null)
+            {
+                foreach (var connection in saveData.Connections.Select(path => new DatabaseConnection(path,
+                    path.Contains("SSL")
+                        ? DatabaseConnection.EConnectionType.MySQL
+                        : DatabaseConnection.EConnectionType.SQLite)))
+                {
+                    connections.Add(connection);
+                }
+            }
+            
+            connectionStates.Clear();
+            if (saveData == null) return;
+            
+            foreach (var pair in saveData.ExpandedConnections)
             {
                 var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
-                if (connection != null && connection.Databases.Count > 0)
+                if (connection != null)
                 {
+                    connectionStates[connection] = pair.Value;
+                }
+            }
+            
+            databaseStates.Clear();
+            foreach (var db in from pair in saveData.ExpandedDatabases let connection = connections.FirstOrDefault(c => c.Path == pair.Key)
+                where connection != null from db in connection.Databases where pair.Value.Contains(db.Name) select db)
+            {
+                databaseStates[db] = true;
+            }
+            
+            if (saveData.OpenedTables.Count > 0)
+            {
+                foreach (var pair in saveData.OpenedTables)
+                {
+                    var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
+                    if (connection == null || connection.Databases.Count <= 0) continue;
                     selectedConnectionIndex = connections.IndexOf(connection);
                     selectedDatabaseIndex = 0;
                     selectedTableForContent = pair.Value;
 
                     var database = connection.Databases[selectedDatabaseIndex];
                     database.LoadTableContent(pair.Value);
-
-                    // Debug.Log($"[DEBUG] Restored Opened Table: {pair.Value} for {connection.Path}");
                 }
             }
+
+            Repaint();
         }
 
-        Repaint();
-        // Debug.Log("[DEBUG] Successfully Loaded Session Data");
-    }
+        #endregion
 
-    #endregion
-
-    private Dictionary<DatabaseConnection, bool> connectionStates = new Dictionary<DatabaseConnection, bool>();
-    private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
-
-
-    private void DrawConnectionForm()
-    {
-        GUILayout.Space(10);
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-        selectedConnectionType =
-            (EConnectionType) EditorGUILayout.EnumPopup("Connection Type", selectedConnectionType);
-
-        switch (selectedConnectionType)
+        private void DrawWorkPanel()
         {
-            case EConnectionType.Local:
+            EditorGUILayout.BeginVertical(style: "box");
+
+            if (showAddConnectionForm)
             {
-                EditorGUILayout.BeginHorizontal();
-
-                EditorGUILayout.LabelField("Database File", GUILayout.Width(100));
-                localDatabasePath = EditorGUILayout.TextField(localDatabasePath, GUILayout.ExpandWidth(true));
-                if (GUILayout.Button("Browse", GUILayout.Width(70)))
-                {
-                    string path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        localDatabasePath = path;
-                    }
-                }
-
-                EditorGUILayout.EndHorizontal();
-                break;
-            }
-            case EConnectionType.Remote:
-                EditorGUILayout.BeginVertical(GUILayout.Width(350));
-
-                remoteServerAddress = EditorGUILayout.TextField("Server Address", remoteServerAddress);
-                remoteDatabaseName = EditorGUILayout.TextField("Database Name", remoteDatabaseName);
-                remoteUserID = EditorGUILayout.TextField("User ID", remoteUserID);
-                remotePassword = EditorGUILayout.PasswordField("Password", remotePassword);
-                remoteSSLMode = EditorGUILayout.TextField("SSL Mode", remoteSSLMode);
+                DrawConnectionForm();
 
                 EditorGUILayout.EndVertical();
-                break;
+                return;
+            }
+
+            if (selectedConnectionIndex < 0 || selectedDatabaseIndex < 0)
+            {
+                EditorGUILayout.LabelField("Select a connection and database to manage.", GUILayout.Width(400));
+
+                EditorGUILayout.EndVertical();
+                return;
+            }
+
+            selectedTab = GUILayout.Toolbar(selectedTab, tabs, GUILayout.Height(0), GUILayout.Width(0));
+
+            EditorGUILayout.BeginHorizontal();
+
+            for (var index = 0; index < tabs.Length; index++)
+            {
+                var tab = tabs[index];
+                var backColor = GUI.backgroundColor;
+                var style = new GUIStyle(GUI.skin.button)
+                {
+                    fontStyle = FontStyle.Bold,
+                    normal =
+                    {
+                        textColor = Color.white
+                    }
+                };
+
+                if (selectedTab == index) GUI.backgroundColor = Color.cyan;
+
+                if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
+                    selectedTab = index;
+
+                GUI.backgroundColor = backColor;
+
+                if (index == tabs.Length - 1) continue;
+                GUILayout.Space(10);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            switch (selectedTab)
+            {
+                case 0:
+                    if (!string.IsNullOrEmpty(selectedTableForContent))
+                        DrawDatabaseOverview();
+                    else
+                        DrawDatabaseTables();
+                    break;
+
+                case 1:
+                    DrawStructure();
+                    break;
+                case 2:
+                    DrawSearch();
+                    break;
+                case 3:
+                    DrawSqlExecutor();
+                    break;
+            }
+
+            EditorGUILayout.EndVertical();
         }
 
-        GUILayout.Space(5);
-        if (GUILayout.Button("Add", GUILayout.Height(25)))
+        private void DrawConnectionForm()
         {
-            if (selectedConnectionType == EConnectionType.Local)
+            GUILayout.Space(10);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            selectedConnectionType =
+                (EConnectionType) EditorGUILayout.EnumPopup("Connection Type", selectedConnectionType);
+
+            switch (selectedConnectionType)
             {
-                if (!string.IsNullOrEmpty(localDatabasePath))
+                case EConnectionType.Local:
                 {
-                    connections.Add(
-                        new DatabaseConnection(localDatabasePath, DatabaseConnection.EConnectionType.SQLite));
+                    EditorGUILayout.BeginHorizontal();
+
+                    EditorGUILayout.LabelField("Database File", GUILayout.Width(100));
+                    localDatabasePath = EditorGUILayout.TextField(localDatabasePath, GUILayout.ExpandWidth(true));
+                    if (GUILayout.Button("Browse", GUILayout.Width(70)))
+                    {
+                        var path = EditorUtility.OpenFilePanel("Select SQLite Database", "", "sqlite");
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            localDatabasePath = path;
+                        }
+                    }
+
+                    EditorGUILayout.EndHorizontal();
+                    break;
+                }
+                case EConnectionType.Remote:
+                    EditorGUILayout.BeginVertical(GUILayout.Width(350));
+
+                    remoteServerAddress = EditorGUILayout.TextField("Server Address", remoteServerAddress);
+                    remoteDatabaseName = EditorGUILayout.TextField("Database Name", remoteDatabaseName);
+                    remoteUserID = EditorGUILayout.TextField("User ID", remoteUserID);
+                    remotePassword = EditorGUILayout.PasswordField("Password", remotePassword);
+                    remoteSSLMode = EditorGUILayout.TextField("SSL Mode", remoteSSLMode);
+
+                    EditorGUILayout.EndVertical();
+                    break;
+            }
+
+            GUILayout.Space(5);
+            if (GUILayout.Button("Add", GUILayout.Height(25)))
+            {
+                if (selectedConnectionType == EConnectionType.Local)
+                {
+                    if (!string.IsNullOrEmpty(localDatabasePath))
+                    {
+                        connections.Add(
+                            new DatabaseConnection(localDatabasePath, DatabaseConnection.EConnectionType.SQLite));
+                        SaveSessionData();
+                    }
+                }
+                else
+                {
+                    var connectionString =
+                        $"Server={remoteServerAddress};" +
+                        $"Database={remoteDatabaseName};" +
+                        $"User ID={remoteUserID};" +
+                        $"Password={remotePassword};" +
+                        $"SslMode={remoteSSLMode};";
+                    connections.Add(new DatabaseConnection(connectionString, DatabaseConnection.EConnectionType.MySQL));
                     SaveSessionData();
                 }
+
+                showAddConnectionForm = false;
             }
-            else
-            {
-                string connectionString =
-                    $"Server={remoteServerAddress};" +
-                    $"Database={remoteDatabaseName};" +
-                    $"User ID={remoteUserID};" +
-                    $"Password={remotePassword};" +
-                    $"SslMode={remoteSSLMode};";
-                connections.Add(new DatabaseConnection(connectionString, DatabaseConnection.EConnectionType.MySQL));
-                SaveSessionData();
-            }
-
-            showAddConnectionForm = false; // Закрыть форму после добавления
-        }
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void DrawRightPanel()
-    {
-        EditorGUILayout.BeginVertical(style: "box");
-
-        if (showAddConnectionForm)
-        {
-            DrawConnectionForm();
 
             EditorGUILayout.EndVertical();
-            return;
         }
 
-        if (selectedConnectionIndex < 0 || selectedDatabaseIndex < 0)
+        private void DrawSearch()
         {
-            EditorGUILayout.LabelField("Select a connection and database to manage.", GUILayout.Width(400));
-
-            EditorGUILayout.EndVertical();
-            return;
-        }
-
-        selectedTab = GUILayout.Toolbar(selectedTab, _tabs, GUILayout.Height(0), GUILayout.Width(0));
-
-        EditorGUILayout.BeginHorizontal();
-
-        for (var index = 0; index < _tabs.Length; index++)
-        {
-            var tab = _tabs[index];
-            var backColor = GUI.backgroundColor;
-            var style = new GUIStyle(GUI.skin.button)
+            if (string.IsNullOrEmpty(selectedTableForContent))
             {
-                fontStyle = FontStyle.Bold,
-                normal =
-                {
-                    textColor = Color.white
-                }
-            };
-
-            if (selectedTab == index) GUI.backgroundColor = Color.cyan;
-
-            if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
-                selectedTab = index;
-
-            GUI.backgroundColor = backColor;
-
-            if (index == _tabs.Length - 1) continue;
-            GUILayout.Space(10);
-        }
-
-        EditorGUILayout.EndHorizontal();
-
-        switch (selectedTab)
-        {
-            case 0:
-                if (!string.IsNullOrEmpty(selectedTableForContent))
-                    DrawDatabaseOverview();
-                else
-                    DrawDatabaseTables();
-                break;
-
-            case 1:
-                DrawStructure();
-                break;
-            case 2:
-                DrawSearch();
-                break;
-            case 3:
-                DrawSQLExecutor();
-                break;
-        }
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void DrawSearch()
-    {
-        if (string.IsNullOrEmpty(selectedTableForContent))
-        {
-            EditorGUILayout.LabelField("Select a table to search.", EditorStyles.boldLabel);
-            return;
-        }
-
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-            ? database.GetTableColumns_Maria(selectedTableForContent)
-            : database.GetTableColumns_Lite(selectedTableForContent);
-
-        if (columns == null || columns.Count == 0)
-        {
-            EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
-                EditorStyles.boldLabel);
-            return;
-        }
-
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-        EditorGUILayout.LabelField($"Search in table: {selectedTableForContent}", EditorStyles.boldLabel);
-        GUILayout.FlexibleSpace();
-        // Search Button
-        if (GUILayout.Button("🔍 Search", GUILayout.Height(20)))
-        {
-            ExecuteSearchQuery(database);
-        }
-
-        EditorGUILayout.EndHorizontal();
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
-        // Table Header
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-        EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
-        EditorGUILayout.LabelField("Operator", EditorStyles.boldLabel, GUILayout.Width(100));
-        EditorGUILayout.LabelField("Value", EditorStyles.boldLabel, GUILayout.Width(150));
-        EditorGUILayout.EndHorizontal();
-
-        // Dynamic search filters
-        if (searchFilters == null || searchFilters.Count != columns.Count)
-        {
-            searchFilters = new List<SearchFilter>();
-            foreach (var column in columns)
-            {
-                searchFilters.Add(new SearchFilter {Column = column.Name, Operator = "=", Value = ""});
+                EditorGUILayout.LabelField("Select a table to search.", EditorStyles.boldLabel);
+                return;
             }
-        }
 
-        for (int i = 0; i < columns.Count; i++)
-        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? database.GetTableColumns_Maria(selectedTableForContent)
+                : database.GetTableColumns_Lite(selectedTableForContent);
+
+            if (columns == null || columns.Count == 0)
+            {
+                EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
+                    EditorStyles.boldLabel);
+                return;
+            }
+
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-
-            // Column Name
-            EditorGUILayout.LabelField(columns[i].Name, GUILayout.Width(150));
-
-            // Operator Selection (Fixed!)
-            int selectedOperatorIndex = Array.IndexOf(availableOperators, searchFilters[i].Operator);
-            selectedOperatorIndex =
-                EditorGUILayout.Popup(selectedOperatorIndex, availableOperators, GUILayout.Width(100));
-            searchFilters[i].Operator = availableOperators[selectedOperatorIndex];
-
-            // Value Input
-            searchFilters[i].Value = EditorGUILayout.TextField(searchFilters[i].Value, GUILayout.Width(150));
+            EditorGUILayout.LabelField($"Search in table: {selectedTableForContent}", EditorStyles.boldLabel);
+            GUILayout.FlexibleSpace();
+            // Search Button
+            if (GUILayout.Button("🔍 Search", GUILayout.Height(20)))
+            {
+                ExecuteSearchQuery(database);
+            }
 
             EditorGUILayout.EndHorizontal();
-        }
 
-        EditorGUILayout.EndScrollView();
+            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            // Table Header
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
+            EditorGUILayout.LabelField("Operator", EditorStyles.boldLabel, GUILayout.Width(100));
+            EditorGUILayout.LabelField("Value", EditorStyles.boldLabel, GUILayout.Width(150));
+            EditorGUILayout.EndHorizontal();
 
-        // Display search results
-        if (tableData.Count > 0)
-        {
-            DrawQueryResults();
-        }
-    }
-
-    private void ExecuteSearchQuery(Database database)
-    {
-        try
-        {
-            tableData.Clear(); // Clear previous results
-            List<string> conditions = new List<string>();
-
-            foreach (var filter in searchFilters)
+            // Dynamic search filters
+            if (searchFilters == null || searchFilters.Count != columns.Count)
             {
-                if (!string.IsNullOrEmpty(filter.Value))
+                searchFilters = new List<SearchFilter>();
+                foreach (var column in columns)
                 {
-                    conditions.Add($"{filter.Column} {filter.Operator} '{filter.Value}'");
+                    searchFilters.Add(new SearchFilter {Column = column.Name, Operator = "=", Value = ""});
                 }
             }
 
-            string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
-            string query = $"SELECT * FROM {selectedTableForContent} {whereClause};";
-
-            switch (database.ConnectionType)
+            for (int i = 0; i < columns.Count; i++)
             {
-                case DatabaseConnection.EConnectionType.SQLite:
-                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
-                    {
-                        connection.Open();
-                        using (var dbCommand = connection.CreateCommand())
-                        {
-                            dbCommand.CommandText = query;
-                            ReadTableResults(dbCommand);
-                        }
-                    }
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-                    break;
-                case DatabaseConnection.EConnectionType.MySQL:
-                    using (var connection = new MySqlConnection(database.ConnectionString))
-                    {
-                        connection.Open();
-                        using (var dbCommand = connection.CreateCommand())
-                        {
-                            dbCommand.CommandText = query;
-                            ReadTableResults(dbCommand);
-                        }
-                    }
+                // Column Name
+                EditorGUILayout.LabelField(columns[i].Name, GUILayout.Width(150));
 
-                    break;
+                // Operator Selection (Fixed!)
+                int selectedOperatorIndex = Array.IndexOf(availableOperators, searchFilters[i].Operator);
+                selectedOperatorIndex =
+                    EditorGUILayout.Popup(selectedOperatorIndex, availableOperators, GUILayout.Width(100));
+                searchFilters[i].Operator = availableOperators[selectedOperatorIndex];
+
+                // Value Input
+                searchFilters[i].Value = EditorGUILayout.TextField(searchFilters[i].Value, GUILayout.Width(150));
+
+                EditorGUILayout.EndHorizontal();
             }
 
-            sqlExecutionMessage = "Search executed successfully.";
-        }
-        catch (Exception ex)
-        {
-            sqlExecutionMessage = "Error: " + ex.Message;
-        }
-    }
+            EditorGUILayout.EndScrollView();
 
-
-    private void DrawDatabaseOverview()
-    {
-        if (connections.Count <= selectedConnectionIndex) return;
-        var connection = connections[selectedConnectionIndex];
-
-        if (connection.Databases.Count <= selectedDatabaseIndex) return;
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        DrawTableContentUI(database); // Only show table content
-    }
-
-    private List<bool> tableSelections = new List<bool>();
-    private bool selectAllTables = false;
-
-    private void DrawDatabaseTables()
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        List<string> tables = database.GetTableNames();
-        if (tableSelections.Count != tables.Count)
-        {
-            tableSelections = new List<bool>(new bool[tables.Count]);
-        }
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
-
-        // Bulk Actions Header
-        EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel);
-        selectAllTables = EditorGUILayout.Toggle(selectAllTables, GUILayout.Width(20));
-
-        var headerStyle = EditorStyles.toolbarButton;
-        headerStyle.normal.textColor = Color.white;
-
-        if (GUILayout.Button("Select All", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
-        {
-            for (int i = 0; i < tableSelections.Count; i++)
+            // Display search results
+            if (tableData.Count > 0)
             {
-                tableSelections[i] = selectAllTables;
+                DrawQueryResults();
             }
         }
 
-        GUILayout.FlexibleSpace();
-        if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+        private void ExecuteSearchQuery(Database database)
         {
-            PerformBulkTableAction("View");
-        }
-
-        headerStyle.normal.textColor = new Color(184, 0, 231, 1);
-        if (GUILayout.Button("🏗️ Structure", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
-        {
-            PerformBulkTableAction("Structure");
-        }
-
-        headerStyle.normal.textColor = Color.cyan;
-        if (GUILayout.Button("🔍 Search", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
-        {
-            PerformBulkTableAction("Search");
-        }
-
-        headerStyle.normal.textColor = Color.green;
-        if (GUILayout.Button("➕ Insert", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
-        {
-            PerformBulkTableAction("Insert");
-        }
-
-        headerStyle.normal.textColor = Color.yellow;
-        if (GUILayout.Button("🗑️ Clear", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
-        {
-            PerformBulkTableAction("Clear");
-        }
-
-        headerStyle.normal.textColor = Color.red;
-        if (GUILayout.Button("❌ Delete", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
-        {
-            PerformBulkTableAction("Delete");
-        }
-
-        EditorGUILayout.EndHorizontal();
-
-        // Table list with checkboxes
-        foreach (var (table, index) in tables.Select((table, index) => (table, index)))
-        {
-            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-
-            tableSelections[index] = EditorGUILayout.Toggle(tableSelections[index], GUILayout.Width(20));
-
-            // Table Name
-            if (GUILayout.Button(table, EditorStyles.label, GUILayout.Width(200)))
+            try
             {
-                selectedTableForContent = table;
-                database.LoadTableContent(table);
-                SaveSessionData();
-            }
+                tableData.Clear(); // Clear previous results
+                List<string> conditions = new List<string>();
 
-            var style = EditorStyles.toolbarButton;
-            style.normal.textColor = Color.white;
-
-            // Action Buttons for Each Table
-            if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "View");
-            }
-
-            GUILayout.Space(5);
-            style.normal.textColor = new Color(184, 0, 231, 1);
-
-            if (GUILayout.Button("🏗️ Structure", style, GUILayout.Width(100)))
-            {
-                ExecuteTableAction(table, "Structure");
-            }
-
-            GUILayout.Space(5);
-            style.normal.textColor = Color.cyan;
-
-            if (GUILayout.Button("🔍 Search", style, GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Search");
-            }
-
-            GUILayout.Space(5);
-            style.normal.textColor = Color.green;
-
-            if (GUILayout.Button("➕ Insert", style, GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Insert");
-            }
-
-            GUILayout.Space(5);
-            style.normal.textColor = Color.yellow;
-
-            if (GUILayout.Button("🗑️ Clear", style, GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Clear");
-            }
-
-            GUILayout.Space(5);
-            style.normal.textColor = Color.red;
-
-            if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
-            {
-                ExecuteTableAction(table, "Delete");
-            }
-
-            // GUI.backgroundColor = color;
-            EditorGUILayout.EndHorizontal();
-        }
-
-        EditorGUILayout.EndScrollView();
-    }
-
-
-    private void OpenCreateTableWindow(Database database)
-    {
-        CreateTableWindow.ShowWindow(database);
-    }
-
-    private void DrawTableContentUI(Database database)
-    {
-        if (string.IsNullOrEmpty(selectedTableForContent)) return;
-
-        var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
-        if (table == null) return;
-
-        string primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-            ? database.GetPrimaryKeyColumn_Maria(selectedTableForContent)
-            : database.GetPrimaryKeyColumn_Lite(selectedTableForContent);
-        int totalRows = table.Data.Count;
-        int totalPages = Mathf.CeilToInt((float) totalRows / rowsPerPage);
-        currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
-
-        if (table.Data.Count > 0)
-        {
-            // **Column Headers with Right-Click Menu**
-            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            foreach (var column in table.Data[0].Keys)
-            {
-                string displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
-                GUIStyle columnStyle = new GUIStyle(GUI.skin.label)
-                    {alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold};
-
-                Rect headerRect = GUILayoutUtility.GetRect(120, 25);
-                GUI.Box(headerRect, displayColumn, columnStyle);
-
-                // **Right-Click Context Menu for Column Headers**
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
-                    headerRect.Contains(Event.current.mousePosition))
+                foreach (var filter in searchFilters)
                 {
+                    if (!string.IsNullOrEmpty(filter.Value))
+                    {
+                        conditions.Add($"{filter.Column} {filter.Operator} '{filter.Value}'");
+                    }
+                }
+
+                string whereClause = conditions.Count > 0 ? "WHERE " + string.Join(" AND ", conditions) : "";
+                string query = $"SELECT * FROM {selectedTableForContent} {whereClause};";
+
+                switch (database.ConnectionType)
+                {
+                    case DatabaseConnection.EConnectionType.SQLite:
+                        using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                        {
+                            connection.Open();
+                            using (var dbCommand = connection.CreateCommand())
+                            {
+                                dbCommand.CommandText = query;
+                                ReadTableResults(dbCommand);
+                            }
+                        }
+
+                        break;
+                    case DatabaseConnection.EConnectionType.MySQL:
+                        using (var connection = new MySqlConnection(database.ConnectionString))
+                        {
+                            connection.Open();
+                            using (var dbCommand = connection.CreateCommand())
+                            {
+                                dbCommand.CommandText = query;
+                                ReadTableResults(dbCommand);
+                            }
+                        }
+
+                        break;
+                }
+
+                sqlExecutionMessage = "Search executed successfully.";
+            }
+            catch (Exception ex)
+            {
+                sqlExecutionMessage = "Error: " + ex.Message;
+            }
+        }
+
+
+        private void DrawDatabaseOverview()
+        {
+            if (connections.Count <= selectedConnectionIndex) return;
+            var connection = connections[selectedConnectionIndex];
+
+            if (connection.Databases.Count <= selectedDatabaseIndex) return;
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            DrawTableContentUI(database);
+        }
+
+        private void DrawDatabaseTables()
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            var tables = database.GetTableNames();
+            if (tableSelections.Count != tables.Count)
+            {
+                tableSelections = new List<bool>(new bool[tables.Count]);
+            }
+
+            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+            // Bulk Actions Header
+            EditorGUILayout.BeginHorizontal(EditorStyles.boldLabel);
+            selectAllTables = EditorGUILayout.Toggle(selectAllTables, GUILayout.Width(20));
+
+            var headerStyle = EditorStyles.toolbarButton;
+            headerStyle.normal.textColor = Color.white;
+
+            if (GUILayout.Button("Select All", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
+            {
+                for (int i = 0; i < tableSelections.Count; i++)
+                {
+                    tableSelections[i] = selectAllTables;
+                }
+            }
+
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+                PerformBulkTableAction("View");
+            
+
+            headerStyle.normal.textColor = new Color(184, 0, 231, 1);
+            if (GUILayout.Button("🏗️ Structure", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
+                PerformBulkTableAction("Structure");
+            
+
+            headerStyle.normal.textColor = Color.cyan;
+            if (GUILayout.Button("🔍 Search", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+                PerformBulkTableAction("Search");
+            
+
+            headerStyle.normal.textColor = Color.green;
+            if (GUILayout.Button("➕ Insert", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+                PerformBulkTableAction("Insert");
+            
+
+            headerStyle.normal.textColor = Color.yellow;
+            if (GUILayout.Button("🗑️ Clear", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+                PerformBulkTableAction("Clear");
+            
+
+            headerStyle.normal.textColor = Color.red;
+            if (GUILayout.Button("❌ Delete", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
+                PerformBulkTableAction("Delete");
+            
+
+            EditorGUILayout.EndHorizontal();
+
+            // Table list with checkboxes
+            foreach (var (table, index) in tables.Select((table, index) => (table, index)))
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
+                tableSelections[index] = EditorGUILayout.Toggle(tableSelections[index], GUILayout.Width(20));
+
+                // Table Name
+                if (GUILayout.Button(table, EditorStyles.label, GUILayout.Width(200)))
+                {
+                    selectedTableForContent = table;
+                    database.LoadTableContent(table);
+                    SaveSessionData();
+                }
+
+                var style = EditorStyles.toolbarButton;
+                style.normal.textColor = Color.white;
+
+                // Action Buttons for Each Table
+                if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
+                    ExecuteTableAction(table, "View");
+                
+
+                GUILayout.Space(5);
+                style.normal.textColor = new Color(184, 0, 231, 1);
+
+                if (GUILayout.Button("🏗️ Structure", style, GUILayout.Width(100)))
+                    ExecuteTableAction(table, "Structure");
+                
+
+                GUILayout.Space(5);
+                style.normal.textColor = Color.cyan;
+
+                if (GUILayout.Button("🔍 Search", style, GUILayout.Width(80)))
+                    ExecuteTableAction(table, "Search");
+                
+                GUILayout.Space(5);
+                style.normal.textColor = Color.green;
+
+                if (GUILayout.Button("➕ Insert", style, GUILayout.Width(80)))
+                    ExecuteTableAction(table, "Insert");
+
+                GUILayout.Space(5);
+                style.normal.textColor = Color.yellow;
+
+                if (GUILayout.Button("🗑️ Clear", style, GUILayout.Width(80)))
+                    ExecuteTableAction(table, "Clear");
+                
+                GUILayout.Space(5);
+                style.normal.textColor = Color.red;
+
+                if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
+                    ExecuteTableAction(table, "Delete");
+                
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+        
+        private void OpenCreateTableWindow(Database database) => CreateTableWindow.ShowWindow(database);
+
+        private void DrawTableContentUI(Database database)
+        {
+            if (string.IsNullOrEmpty(selectedTableForContent)) return;
+
+            var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
+            if (table == null) return;
+
+            var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? database.GetPrimaryKeyColumn_Maria(selectedTableForContent)
+                : database.GetPrimaryKeyColumn_Lite(selectedTableForContent);
+            var totalRows = table.Data.Count;
+            var totalPages = Mathf.CeilToInt((float) totalRows / RowsPerPage);
+            currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
+
+            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition, GUILayout.Height(500));
+
+            if (table.Data.Count > 0)
+            {
+                // **Column Headers with Right-Click Menu**
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                foreach (var column in table.Data[0].Keys)
+                {
+                    var displayColumn = column == primaryKeyColumn ? $"🔑 {column}" : column;
+                    var columnStyle = new GUIStyle(GUI.skin.label)
+                        {alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold};
+
+                    var headerRect = GUILayoutUtility.GetRect(120, 25);
+                    GUI.Box(headerRect, displayColumn, columnStyle);
+
+                    // **Right-Click Context Menu for Column Headers**
+                    if (Event.current.type != EventType.MouseDown || Event.current.button != 1 ||
+                        !headerRect.Contains(Event.current.mousePosition)) continue;
                     ShowColumnContextMenu(column, selectedTableForContent);
                     Event.current.Use();
                 }
-            }
 
-            if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
-                OpenAddColumnWindow(selectedTableForContent);
-            EditorGUILayout.EndHorizontal();
+                if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
+                    OpenAddColumnWindow(selectedTableForContent);
+                EditorGUILayout.EndHorizontal();
 
-            // **Table Rows**
-            // Paginated Table Rows
-            for (int i = currentPage * rowsPerPage; i < Mathf.Min((currentPage + 1) * rowsPerPage, totalRows); i++)
-            {
-                var row = table.Data[i];
-
-                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-
-                foreach (var column in row.Keys)
+                // **Table Rows**
+                // Paginated Table Rows
+                for (int i = currentPage * RowsPerPage; i < Mathf.Min((currentPage + 1) * RowsPerPage, totalRows); i++)
                 {
-                    object value = row[column];
+                    var row = table.Data[i];
 
-                    var cellStyle = EditorStyles.boldLabel;
-                    cellStyle.alignment = TextAnchor.MiddleCenter;
-                    cellStyle.fontStyle = FontStyle.Normal;
-                    Rect cellRect = GUILayoutUtility.GetRect(120, 25);
-                    GUI.Box(cellRect, "", cellStyle);
+                    EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
 
-                    // **Right-Click Context Menu for Cells**
-                    if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
-                        cellRect.Contains(Event.current.mousePosition))
+                    foreach (var column in row.Keys)
                     {
-                        ShowCellContextMenu(selectedTableForContent, row, column, ConvertValueToString(value));
-                        Event.current.Use();
-                    }
+                        var value = row[column];
 
-                    // **Fetch Column Type from Database**
-                    var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                        ? database.GetColumnType_Maria(selectedTableForContent, column)
-                        : database.GetColumnType_Lite(selectedTableForContent, column);
+                        var cellStyle = EditorStyles.boldLabel;
+                        cellStyle.alignment = TextAnchor.MiddleCenter;
+                        cellStyle.fontStyle = FontStyle.Normal;
+                        var cellRect = GUILayoutUtility.GetRect(120, 25);
+                        GUI.Box(cellRect, "", cellStyle);
 
-                    // **Ensure PropertyField Always Renders for Unity Object Types**
-                    if (columnType == "GameObject" || columnType == "Sprite")
-                    {
-                        EditorGUI.BeginChangeCheck();
-                        Object newObject = EditorGUI.ObjectField(cellRect, value as UnityEngine.Object,
-                            columnType == "GameObject" ? typeof(GameObject) : typeof(Sprite), false);
-                        if (EditorGUI.EndChangeCheck())
+                        // **Right-Click Context Menu for Cells**
+                        if (Event.current.type == EventType.MouseDown && Event.current.button == 1 &&
+                            cellRect.Contains(Event.current.mousePosition))
                         {
-                            UpdateCellValue(selectedTableForContent, row, column, newObject);
+                            ShowCellContextMenu(selectedTableForContent, row, column, ConvertValueToString(value));
+                            Event.current.Use();
                         }
-                    }
-                    // **Standard Label for Text/Numeric Values**
-                    else if (columnType == "Vector2" && value is Vector2 vector2)
-                    {
-                        GUI.Label(cellRect, $"Vector2({vector2.x}, {vector2.y})", cellStyle);
-                    }
-                    else if (columnType == "Vector3" && value is Vector3 vector3)
-                    {
-                        GUI.Label(cellRect, $"Vector3({vector3.x}, {vector3.y}, {vector3.z})", cellStyle);
-                    }
-                    else
-                    {
-                        string cellValue = value?.ToString() ?? ""; // Remove "NULL" label
-                        GUI.Label(cellRect, cellValue,
-                            new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter});
+
+                        // **Fetch Column Type from Database**
+                        var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                            ? database.GetColumnType_Maria(selectedTableForContent, column)
+                            : database.GetColumnType_Lite(selectedTableForContent, column);
+
+                        switch (columnType)
+                        {
+                            // **Ensure PropertyField Always Renders for Unity Object Types**
+                            case "GameObject":
+                            case "Sprite":
+                            {
+                                EditorGUI.BeginChangeCheck();
+                                var newObject = EditorGUI.ObjectField(cellRect, value as UnityEngine.Object,
+                                    columnType == "GameObject" ? typeof(GameObject) : typeof(Sprite), false);
+                                if (EditorGUI.EndChangeCheck())
+                                {
+                                    UpdateCellValue(selectedTableForContent, row, column, newObject);
+                                }
+
+                                break;
+                            }
+                            // **Standard Label for Text/Numeric Values**
+                            case "Vector2" when value is Vector2 vector2:
+                                GUI.Label(cellRect, $"Vector2({vector2.x}, {vector2.y})", cellStyle);
+                                break;
+                            case "Vector3" when value is Vector3 vector3:
+                                GUI.Label(cellRect, $"Vector3({vector3.x}, {vector3.y}, {vector3.z})", cellStyle);
+                                break;
+                            default:
+                            {
+                                var cellValue = value?.ToString() ?? ""; // Remove "NULL" label
+                                GUI.Label(cellRect, cellValue,
+                                    new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter});
+                                break;
+                            }
+                        }
+
+                        cellStyle.alignment = TextAnchor.MiddleLeft;
                     }
 
-                    cellStyle.alignment = TextAnchor.MiddleLeft;
+                    if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25)))
+                        ShowRowContextMenu(selectedTableForContent, row);
+                    EditorGUILayout.EndHorizontal();
+                    GUILayout.Space(2);
                 }
 
-                if (GUILayout.Button("...", GUILayout.Width(25), GUILayout.Height(25)))
-                    ShowRowContextMenu(selectedTableForContent, row);
-                EditorGUILayout.EndHorizontal();
-                GUILayout.Space(2);
+                var style = new GUIStyle(GUI.skin.button)
+                {
+                    normal =
+                    {
+                        textColor = Color.green
+                    }
+                };
+                
+                if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
+                    OpenAddRowWindow(selectedTableForContent);
+            }
+            else
+            {
+                EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
+                if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
             }
 
-            var style = new GUIStyle(GUI.skin.button);
-            style.normal.textColor = Color.green;
-            if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
-                OpenAddRowWindow(selectedTableForContent);
-        }
-        else
-        {
-            EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
-            if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
-        }
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
 
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
+            if (GUILayout.Button("◀", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage > 0)
+                currentPage--;
 
-        if (GUILayout.Button("◀", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage > 0)
-        {
-            currentPage--;
-        }
+            EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel,
+                GUILayout.Width(100));
 
-        EditorGUILayout.LabelField($"Page {currentPage + 1} of {totalPages}", EditorStyles.boldLabel,
-            GUILayout.Width(100));
+            if (GUILayout.Button("▶", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage < totalPages - 1)
+                currentPage++;
+            
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
 
-        if (GUILayout.Button("▶", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage < totalPages - 1)
-        {
-            currentPage++;
+
+            EditorGUILayout.EndScrollView();
         }
 
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-
-
-        EditorGUILayout.EndScrollView();
-    }
-
-    private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
-    {
-        GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Duplicate Row"), false, () => OpenDuplicateRowWindow(tableName, rowData));
-        menu.AddItem(new GUIContent("Delete Row"), false, () => OpenDeleteRowWindow(tableName, rowData));
-        menu.ShowAsContext();
-    }
-
-    public void DuplicateRow(string tableName, Dictionary<string, object> newRowData)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
+        private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
         {
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Duplicate Row"), false, () => OpenDuplicateRowWindow(tableName, rowData));
+            menu.AddItem(new GUIContent("Delete Row"), false, () => OpenDeleteRowWindow(tableName, rowData));
+            menu.ShowAsContext();
+        }
+
+        public void DuplicateRow(string tableName, Dictionary<string, object> newRowData)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database == null) return;
+            
             database.InsertRow_Maria(tableName, newRowData);
             database.LoadTableContent(tableName);
         }
-    }
 
 
-    private void OpenDuplicateRowWindow(string tableName, Dictionary<string, object> rowData)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
+        private void OpenDuplicateRowWindow(string tableName, Dictionary<string, object> rowData)
         {
-            string primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(tableName);
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database == null) return;
+            
+            var primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(tableName);
             DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
         }
-    }
 
 
-    private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
-        string cellValue)
-    {
-        GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Change Value"), false,
-            () => OpenChangeValueWindow(tableName, rowData, columnName, cellValue));
-        menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
-        menu.ShowAsContext();
-    }
-
-    private string ConvertValueToString(object value)
-    {
-        if (value == null)
-            return "";
-
-        if (value is Vector2 vector2)
-            return $"{vector2.x}, {vector2.y}";
-
-        if (value is Vector3 vector3)
-            return $"{vector3.x}, {vector3.y}, {vector3.z}";
-
-        if (value is Sprite sprite)
-            return sprite != null ? $"[Sprite] {sprite.name}" : "";
-
-        if (value is GameObject gameObject)
-            return gameObject != null ? $"[GameObject] {gameObject.name}" : "";
-
-        return value.ToString();
-    }
-
-
-    public void RemoveConnection(DatabaseConnection connection)
-    {
-        connections.Remove(connection);
-        SaveSessionData();
-        Debug.Log($"[INFO] Connection '{connection.Name}' removed.");
-    }
-
-    private void RemoveDatabase(DatabaseConnection connection, Database database)
-    {
-        connection.Databases.Remove(database);
-        selectedConnectionIndex = -1;
-        SaveSessionData();
-        Debug.Log($"[INFO] Database '{database.Name}' removed.");
-    }
-
-    private void OpenDeleteConnectionWindow(DatabaseConnection connection)
-    {
-        ConfirmationWindow.ShowWindow(
-            "Delete Connection",
-            $"Are you sure you want to delete connection '{connection.Name}'?",
-            () => RemoveConnection(connection)
-        );
-    }
-
-    private void OpenDeleteDatabaseWindow(DatabaseConnection connection, Database database)
-    {
-        ConfirmationWindow.ShowWindow(
-            "Delete Database",
-            $"Are you sure you want to delete database '{database.Name}'?",
-            () => RemoveDatabase(connection, database)
-        );
-    }
-
-    private void OpenDeleteTableWindow(Database database, string tableName)
-    {
-        ConfirmationWindow.ShowWindow(
-            "Delete Table",
-            $"Are you sure you want to delete table '{tableName}'?",
-            () => database.DeleteTable_Maria(tableName)
-        );
-    }
-
-    private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
-        string cellValue)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null && rowData != null)
+        private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
+            string cellValue)
         {
-            ChangeValueWindow.ShowWindow(database, tableName, rowData, columnName, cellValue);
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Change Value"), false,
+                () => OpenChangeValueWindow(tableName, rowData, columnName, cellValue));
+            menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
+            menu.ShowAsContext();
         }
-        else
+
+        private string ConvertValueToString(object value)
         {
-            Debug.LogError("[ERROR] Unable to open change value window. Database or row data is null.");
+            return value switch
+            {
+                null => "",
+                Vector2 vector2 => $"{vector2.x}, {vector2.y}",
+                Vector3 vector3 => $"{vector3.x}, {vector3.y}, {vector3.z}",
+                Sprite sprite => sprite != null ? $"[Sprite] {sprite.name}" : "",
+                GameObject gameObject => gameObject != null ? $"[GameObject] {gameObject.name}" : "",
+                _ => value.ToString()
+            };
         }
-    }
 
-    private void OpenCreateDatabaseWindow(DatabaseConnection connection)
-    {
-        CreateDatabaseWindow.ShowWindow(this, connection);
-    }
 
-    private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
-        object newValue)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
+        public void RemoveConnection(DatabaseConnection connection)
         {
-            string convertedValue = "";
+            connections.Remove(connection);
+            SaveSessionData();
+            Debug.Log($"[INFO] Connection '{connection.Name}' removed.");
+        }
 
-            string columnType = database.GetColumnType_Maria(tableName, columnName);
+        private void RemoveDatabase(DatabaseConnection connection, Database database)
+        {
+            connection.Databases.Remove(database);
+            selectedConnectionIndex = -1;
+            SaveSessionData();
+            Debug.Log($"[INFO] Database '{database.Name}' removed.");
+        }
+
+        private void OpenDeleteConnectionWindow(DatabaseConnection connection)
+        {
+            ConfirmationWindow.ShowWindow(
+                "Delete Connection",
+                $"Are you sure you want to delete connection '{connection.Name}'?",
+                () => RemoveConnection(connection)
+            );
+        }
+
+        private void OpenDeleteDatabaseWindow(DatabaseConnection connection, Database database)
+        {
+            ConfirmationWindow.ShowWindow(
+                "Delete Database",
+                $"Are you sure you want to delete database '{database.Name}'?",
+                () => RemoveDatabase(connection, database)
+            );
+        }
+
+        private void OpenDeleteTableWindow(Database database, string tableName)
+        {
+            ConfirmationWindow.ShowWindow(
+                "Delete Table",
+                $"Are you sure you want to delete table '{tableName}'?",
+                () => database.DeleteTable_Maria(tableName)
+            );
+        }
+
+        private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
+            string cellValue)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database != null && rowData != null)
+            {
+                ChangeValueWindow.ShowWindow(database, tableName, rowData, columnName, cellValue);
+            }
+            else
+            {
+                Debug.LogError("[ERROR] Unable to open change value window. Database or row data is null.");
+            }
+        }
+
+        private void OpenCreateDatabaseWindow(DatabaseConnection connection)
+        {
+            CreateDatabaseWindow.ShowWindow(this, connection);
+        }
+
+        private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
+            object newValue)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database == null) return;
+
+            var columnType = database.GetColumnType_Maria(tableName, columnName);
 
             try
             {
+                var convertedValue = "";
                 if (newValue == null)
                 {
                     convertedValue = "NULL"; // Store as NULL in the database
                 }
-                else if (columnType == "GameObject" && newValue is GameObject gameObject)
-                {
-                    convertedValue = AssetDatabase.GetAssetPath(gameObject); // Store asset path
-                }
-                else if (columnType == "Sprite" && newValue is Sprite sprite)
-                {
-                    convertedValue = AssetDatabase.GetAssetPath(sprite); // Store asset path
-                }
-                else if (columnType == "Vector2" && newValue is Vector2 vector2)
-                {
-                    convertedValue = $"{vector2.x},{vector2.y}"; // Store as "x,y"
-                }
-                else if (columnType == "Vector3" && newValue is Vector3 vector3)
-                {
-                    convertedValue = $"{vector3.x},{vector3.y},{vector3.z}"; // Store as "x,y,z"
-                }
                 else
-                {
-                    convertedValue = newValue.ToString();
-                }
+                    convertedValue = columnType switch
+                    {
+                        "GameObject" when newValue is GameObject gameObject => AssetDatabase.GetAssetPath(gameObject),
+                        "Sprite" when newValue is Sprite sprite => AssetDatabase.GetAssetPath(sprite),
+                        "Vector2" when newValue is Vector2 vector2 => $"{vector2.x},{vector2.y}",
+                        "Vector3" when newValue is Vector3 vector3 => $"{vector3.x},{vector3.y},{vector3.z}",
+                        _ => newValue.ToString()
+                    };
 
                 if (rowData.ContainsKey(columnName))
                 {
@@ -1197,1024 +1146,981 @@ public class UnitySQLManager : EditorWindow
                 Debug.LogError($"[ERROR] Failed to update cell '{columnName}' in table '{tableName}': {e.Message}");
             }
         }
-    }
 
 
-    private void CopyCellToClipboard(string cellValue)
-    {
-        EditorGUIUtility.systemCopyBuffer = cellValue;
-        Debug.Log($"[INFO] Copied value: {cellValue}");
-    }
-
-    private void OpenDeleteRowWindow(string tableName, Dictionary<string, object> rowData)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null && rowData != null)
+        private void CopyCellToClipboard(string cellValue)
         {
-            DeleteRowConfirmationWindow.ShowWindow(database, tableName, rowData);
-        }
-        else
-        {
-            Debug.LogError("[ERROR] Unable to open delete confirmation window. Database or row data is null.");
-        }
-    }
-
-
-    private void OpenAddRowWindow(string tableName)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        // Get column names for this table
-        List<string> columnNames = database.GetColumnNames_Maria(tableName);
-
-        AddRowWindow.ShowWindow(database, tableName, columnNames);
-    }
-
-
-    private void OpenAddColumnWindow(string tableName)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        AddColumnWindow.ShowWindow(this, tableName);
-    }
-
-    private void ShowColumnContextMenu(string columnName, string tableName)
-    {
-        GenericMenu menu = new GenericMenu();
-        menu.AddItem(new GUIContent("Edit Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
-        menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
-        menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
-        menu.ShowAsContext();
-    }
-
-    private void OpenChangeColumnWindow(string tableName, string columnName)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
-        {
-            ChangeColumnWindow.ShowWindow(database, tableName, columnName);
-        }
-    }
-
-
-    private void OpenDeleteColumnWindow(string tableName, string columnName)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
-    }
-
-
-    private void MakeColumnPrimaryKey(string tableName, string columnName)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-        database.MakePrimaryKey_Maria(tableName, columnName);
-        database.LoadTableContent(tableName);
-    }
-
-    private bool showAISettings = false;
-
-    private void DrawSQLExecutor()
-    {
-        EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);
-
-        DrawSQLExecutor_ModeSelection();
-
-        GUILayout.Space(10);
-
-        EditorGUILayout.BeginHorizontal();
-
-        // Left side: Mode-specific UI
-        EditorGUILayout.BeginVertical();
-        switch (currentMode)
-        {
-            case SQLMode.Manual:
-                DrawSQLExecutorManualMode();
-                break;
-            case SQLMode.AIPowered:
-
-                DrawSQLExecutorAISettings();
-
-                GUILayout.Space(10);
-
-                DrawSQLExecutorAIPrompt();
-                break;
+            EditorGUIUtility.systemCopyBuffer = cellValue;
+            Debug.Log($"[INFO] Copied value: {cellValue}");
         }
 
-        EditorGUILayout.EndVertical();
-        // Right side: Settings panel for AI
-
-
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private void DrawSQLExecutorAISettings()
-    {
-        EditorGUILayout.BeginVertical(GUILayout.Width(500));
-
-        showAISettings = EditorGUILayout.Foldout(showAISettings, "⚙ AI Settings", true,
-            new GUIStyle(EditorStyles.foldout) {fontStyle = FontStyle.Bold});
-
-        if (showAISettings)
+        private void OpenDeleteRowWindow(string tableName, Dictionary<string, object> rowData)
         {
-            EditorGUILayout.BeginVertical("box");
-            DrawAISettingsPanel();
-            EditorGUILayout.EndVertical();
-        }
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
-        EditorGUILayout.EndVertical();
-    }
-
-    private void DrawSQLExecutorAIPrompt()
-    {
-        EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
-        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
-
-        GUILayout.Space(5);
-        if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
-        {
-            string dataContext = "";
-
-            var connection = connections[selectedConnectionIndex];
-            var database = connection.Databases[selectedDatabaseIndex];
-
-            if (provideDatabaseData)
+            if (database != null && rowData != null)
             {
-                dataContext = provideEntireDatabase
-                    ? GetDatabaseDataAsJson(database)
-                    : GetMultipleTablesDataAsJson(database, selectedTableNames);
-            }
-
-            string fullSystemPrompt = systemPrompt;
-
-            if (!string.IsNullOrEmpty(dataContext))
-                fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
-
-            aiResponse = "Thinking...";
-            aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
-            {
-                aiResponse = response;
-
-                // Извлекаем SQL из markdown блока ```sql ... ```
-                string extracted = ExtractSQLFromMarkdown(response);
-                if (!string.IsNullOrEmpty(extracted))
-                {
-                    var connection = connections[selectedConnectionIndex];
-                    var database = connection.Databases[selectedDatabaseIndex];
-                    database.SQLQuery = extracted.Trim();
-                    currentMode = SQLMode.Manual;
-                }
-
-                Repaint();
-            });
-        }
-
-        GUILayout.Space(5);
-        if (!string.IsNullOrEmpty(aiResponse))
-        {
-            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
-            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
-        }
-    }
-
-    private string ExtractSQLFromMarkdown(string response)
-    {
-        const string startTag = "```sql";
-        const string endTag = "```";
-
-        int start = response.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
-        if (start == -1) return null;
-
-        start += startTag.Length;
-        int end = response.IndexOf(endTag, start, StringComparison.OrdinalIgnoreCase);
-        if (end == -1) return null;
-
-        return response.Substring(start, end - start).Trim();
-    }
-
-
-    private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
-    {
-        var output = new List<string>();
-        foreach (var table in tables)
-        {
-            output.Add(GetTableDataAsJson(database, table));
-        }
-
-        return "[" + string.Join(",", output) + "]";
-    }
-
-
-    private void DrawAISettingsPanel()
-    {
-        EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
-
-        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
-            aiProviders.Select(p => p.Name).ToArray());
-        aiProvider = aiProviders[selectedAIProviderIndex];
-
-        provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
-
-        if (provideDatabaseData)
-        {
-            provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
-
-            var connection = connections[selectedConnectionIndex];
-            var database = connection.Databases[selectedDatabaseIndex];
-
-            if (!provideEntireDatabase)
-            {
-                if (tableNames.Count == 0)
-                    tableNames = GetTableNames(database);
-
-                EditorGUILayout.LabelField("Select Tables to Send:", EditorStyles.boldLabel);
-
-                for (int i = 0; i < tableNames.Count; i++)
-                {
-                    bool selected = selectedTableNames.Contains(tableNames[i]);
-                    bool toggle = EditorGUILayout.ToggleLeft(tableNames[i], selected);
-
-                    if (toggle && !selected)
-                        selectedTableNames.Add(tableNames[i]);
-                    else if (!toggle && selected)
-                        selectedTableNames.Remove(tableNames[i]);
-                }
+                DeleteRowConfirmationWindow.ShowWindow(database, tableName, rowData);
             }
             else
             {
-                EditorGUILayout.LabelField(
-                    "Providing Entire Database can cost sufficient Token Waste so proceed with understanding of your actions!",
-                    EditorStyles.helpBox);
+                Debug.LogError("[ERROR] Unable to open delete confirmation window. Database or row data is null.");
             }
         }
 
-        var newKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey);
-        if (newKey == aiApiKey) return;
 
-        aiApiKey = newKey;
-        EditorPrefs.SetString("UnitySQL_AIKey", aiApiKey);
-    }
-
-
-    private void DrawSQLExecutor_ModeSelection()
-    {
-        var searchModes = new[] {"Manual", "AI Powered"};
-        currentMode =
-            (SQLMode) GUILayout.Toolbar((int) currentMode, searchModes, GUILayout.Width(0), GUILayout.Height(0));
-
-        EditorGUILayout.BeginHorizontal();
-
-        for (var index = 0; index < searchModes.Length; index++)
+        private void OpenAddRowWindow(string tableName)
         {
-            var tab = searchModes[index];
-            var backColor = GUI.backgroundColor;
-            var style = new GUIStyle(GUI.skin.button)
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            var openedColumnNames = database.GetColumnNames_Maria(tableName);
+            AddRowWindow.ShowWindow(database, tableName, openedColumnNames);
+        }
+
+
+        private void OpenAddColumnWindow(string tableName)
+        {
+            AddColumnWindow.ShowWindow(this, tableName);
+        }
+
+        private void ShowColumnContextMenu(string columnName, string tableName)
+        {
+            var menu = new GenericMenu();
+            menu.AddItem(new GUIContent("Edit Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
+            menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
+            menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
+            menu.ShowAsContext();
+        }
+
+        private void OpenChangeColumnWindow(string tableName, string columnName)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database == null) return;
+            ChangeColumnWindow.ShowWindow(database, tableName, columnName);
+        }
+
+
+        private void OpenDeleteColumnWindow(string tableName, string columnName)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
+        }
+
+
+        private void MakeColumnPrimaryKey(string tableName, string columnName)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            database.MakePrimaryKey_Maria(tableName, columnName);
+            database.LoadTableContent(tableName);
+        }
+
+        private bool showAISettings = false;
+
+        private void DrawSqlExecutor()
+        {
+            EditorGUILayout.LabelField("SQL Query Executor", EditorStyles.boldLabel);
+
+            DrawSQLExecutor_ModeSelection();
+
+            GUILayout.Space(10);
+
+            EditorGUILayout.BeginHorizontal();
+
+            // Left side: Mode-specific UI
+            EditorGUILayout.BeginVertical();
+            switch (currentMode)
             {
-                fontStyle = FontStyle.Bold,
-                normal =
+                case EsqlMode.Manual:
+                    DrawSqlExecutorManualMode();
+                    break;
+                case EsqlMode.AIPowered:
+
+                    DrawSqlExecutorAISettings();
+
+                    GUILayout.Space(10);
+
+                    DrawSqlExecutorAIPrompt();
+                    break;
+            }
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawSqlExecutorAISettings()
+        {
+            EditorGUILayout.BeginVertical(GUILayout.Width(500));
+
+            showAISettings = EditorGUILayout.Foldout(showAISettings, "⚙ AI Settings", true,
+                new GUIStyle(EditorStyles.foldout) {fontStyle = FontStyle.Bold});
+
+            if (showAISettings)
+            {
+                EditorGUILayout.BeginVertical("box");
+                DrawAISettingsPanel();
+                EditorGUILayout.EndVertical();
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawSqlExecutorAIPrompt()
+        {
+            EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
+            aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
+
+            GUILayout.Space(5);
+            if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
+            {
+                var dataContext = "";
+
+                var connection = connections[selectedConnectionIndex];
+                var database = connection.Databases[selectedDatabaseIndex];
+
+                if (provideDatabaseData)
                 {
-                    textColor = Color.white
+                    dataContext = provideEntireDatabase
+                        ? GetDatabaseDataAsJson(database)
+                        : GetMultipleTablesDataAsJson(database, selectedTableNames);
                 }
+
+                var fullSystemPrompt = systemPrompt;
+
+                if (!string.IsNullOrEmpty(dataContext))
+                    fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
+
+                aiResponse = "Thinking...";
+                aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
+                {
+                    aiResponse = response;
+                    
+                    var extracted = ExtractSqlFromMarkdown(response);
+                    if (!string.IsNullOrEmpty(extracted))
+                    {
+                        var sharedConnection = connections[selectedConnectionIndex];
+                        var sharedDatabase = sharedConnection.Databases[selectedDatabaseIndex];
+                        sharedDatabase.SQLQuery = extracted.Trim();
+                        currentMode = EsqlMode.Manual;
+                    }
+
+                    Repaint();
+                });
+            }
+
+            GUILayout.Space(5);
+            if (string.IsNullOrEmpty(aiResponse)) return;
+            
+            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
+            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
+        }
+
+        private string ExtractSqlFromMarkdown(string response)
+        {
+            const string startTag = "```sql";
+            const string endTag = "```";
+
+            var start = response.IndexOf(startTag, StringComparison.OrdinalIgnoreCase);
+            if (start == -1) return null;
+
+            start += startTag.Length;
+            var end = response.IndexOf(endTag, start, StringComparison.OrdinalIgnoreCase);
+            return end == -1 ? null : response.Substring(start, end - start).Trim();
+        }
+
+
+        private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
+        {
+            var output = tables.Select(table => GetTableDataAsJson(database, table)).ToList();
+            return "[" + string.Join(",", output) + "]";
+        }
+        
+        private void DrawAISettingsPanel()
+        {
+            EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
+
+            selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
+                aiProviders.Select(p => p.Name).ToArray());
+            aiProvider = aiProviders[selectedAIProviderIndex];
+
+            provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
+
+            if (provideDatabaseData)
+            {
+                provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
+
+                var connection = connections[selectedConnectionIndex];
+                var database = connection.Databases[selectedDatabaseIndex];
+
+                if (!provideEntireDatabase)
+                {
+                    if (tableNames.Count == 0)
+                        tableNames = GetTableNames(database);
+
+                    EditorGUILayout.LabelField("Select Tables to Send:", EditorStyles.boldLabel);
+
+                    foreach (var t in tableNames)
+                    {
+                        var selected = selectedTableNames.Contains(t);
+                        var toggle = EditorGUILayout.ToggleLeft(t, selected);
+
+                        switch (toggle)
+                        {
+                            case true when !selected:
+                                selectedTableNames.Add(t);
+                                break;
+                            case false when selected:
+                                selectedTableNames.Remove(t);
+                                break;
+                        }
+                    }
+                }
+                else
+                {
+                    EditorGUILayout.LabelField(
+                        "Providing Entire Database can cost sufficient Token Waste so proceed with understanding of your actions!",
+                        EditorStyles.helpBox);
+                }
+            }
+
+            var newKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey);
+            if (newKey == aiApiKey) return;
+
+            aiApiKey = newKey;
+            EditorPrefs.SetString("UnitySQL_AIKey", aiApiKey);
+        }
+
+
+        private void DrawSQLExecutor_ModeSelection()
+        {
+            var searchModes = new[] {"Manual", "AI Powered"};
+            currentMode =
+                (EsqlMode) GUILayout.Toolbar((int) currentMode, searchModes, GUILayout.Width(0), GUILayout.Height(0));
+
+            EditorGUILayout.BeginHorizontal();
+
+            for (var index = 0; index < searchModes.Length; index++)
+            {
+                var tab = searchModes[index];
+                var backColor = GUI.backgroundColor;
+                var style = new GUIStyle(GUI.skin.button)
+                {
+                    fontStyle = FontStyle.Bold,
+                    normal =
+                    {
+                        textColor = Color.white
+                    }
+                };
+
+                if ((int) currentMode == index) GUI.backgroundColor = Color.cyan;
+
+                if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
+                    currentMode = (EsqlMode) index;
+
+                GUI.backgroundColor = backColor;
+
+                if (index == tabs.Length - 1) continue;
+                GUILayout.Space(10);
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        private void DrawSqlExecutorManualMode()
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            database.SQLQuery = EditorGUILayout.TextArea(database.SQLQuery, GUILayout.Height(100));
+
+            GUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            
+            if (GUILayout.Button("Execute", GUILayout.Width(200), GUILayout.Height(25)))
+                ExecuteSqlQuery(database); 
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            GUILayout.Space(5);
+
+            if (!string.IsNullOrEmpty(sqlExecutionMessage))
+                EditorGUILayout.HelpBox(sqlExecutionMessage, MessageType.Info);
+
+            if (tableData.Count > 0)
+                DrawQueryResults();
+        }
+
+        private void DrawAIPoweredMode()
+        {
+            EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
+
+            selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
+                aiProviders.Select(p => p.Name).ToArray(), GUILayout.Width(300));
+            aiProvider = aiProviders[selectedAIProviderIndex];
+
+            aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
+
+            provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
+
+            var dataContext = "";
+            if (provideDatabaseData)
+            {
+                provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
+
+                var connection = connections[selectedConnectionIndex];
+                var database = connection.Databases[selectedDatabaseIndex];
+
+                if (!provideEntireDatabase)
+                {
+                    if (tableNames.Count == 0)
+                        tableNames = GetTableNames(database);
+
+                    selectedTableIndex = EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
+                }
+
+                dataContext = provideEntireDatabase
+                    ? GetDatabaseDataAsJson(database)
+                    : GetTableDataAsJson(database, tableNames[selectedTableIndex]);
+            }
+
+            GUILayout.Space(5);
+
+            aiApiKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey, GUILayout.Width(600));
+
+            GUILayout.Space(5);
+            if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
+            {
+                var fullSystemPrompt = systemPrompt;
+
+                if (provideDatabaseData && !string.IsNullOrEmpty(dataContext))
+                {
+                    fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
+                }
+
+                aiResponse = "Thinking...";
+                aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
+                {
+                    aiResponse = response;
+                    Repaint();
+                });
+            }
+
+            GUILayout.Space(5);
+            if (string.IsNullOrEmpty(aiResponse)) return;
+            
+            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
+            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
+        }
+
+
+        private List<string> GetTableNames(Database database)
+        {
+            var names = new List<string>();
+            switch (database.ConnectionType)
+            {
+                case DatabaseConnection.EConnectionType.SQLite:
+                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                names.Add(reader.GetString(0));
+                            }
+                        }
+                    }
+
+                    break;
+                case DatabaseConnection.EConnectionType.MySQL:
+                    using (var connection = new SqliteConnection(database.ConnectionString))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                names.Add(reader.GetString(0));
+                            }
+                        }
+                    }
+
+                    break;
+            }
+
+            return names;
+        }
+
+        private string GetTableDataAsJson(Database database, string tableName)
+        {
+            var rows = new List<Dictionary<string, object>>();
+
+            switch (database.ConnectionType)
+            {
+                case DatabaseConnection.EConnectionType.SQLite:
+                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var row = new Dictionary<string, object>();
+                                for (var i = 0; i < reader.FieldCount; i++)
+                                {
+                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    row[reader.GetName(i)] = value;
+                                }
+
+                                rows.Add(row);
+                            }
+                        }
+                    }
+
+                    break;
+                case DatabaseConnection.EConnectionType.MySQL:
+                    using (var connection = new MySqlConnection(database.ConnectionString))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var row = new Dictionary<string, object>();
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    row[reader.GetName(i)] = value;
+                                }
+
+                                rows.Add(row);
+                            }
+                        }
+                    }
+
+                    break;
+            }
+
+            var wrapper = new
+            {
+                table = tableName,
+                rows
             };
 
-            if ((int) currentMode == index) GUI.backgroundColor = Color.cyan;
-
-            if (GUILayout.Button(tab, style, GUILayout.Width(200), GUILayout.Height(25)))
-                currentMode = (SQLMode) index;
-
-            GUI.backgroundColor = backColor;
-
-            if (index == _tabs.Length - 1) continue;
-            GUILayout.Space(10);
+            return JsonConvert.SerializeObject(wrapper, Formatting.Indented);
         }
 
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private void DrawSQLExecutorManualMode()
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        database.SQLQuery = EditorGUILayout.TextArea(database.SQLQuery, GUILayout.Height(100));
-
-        GUILayout.Space(5);
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        if (GUILayout.Button("Execute", GUILayout.Width(200), GUILayout.Height(25)))
+        private string GetDatabaseDataAsJson(Database database)
         {
-            ExecuteSQLQuery(database);
+            var output = GetTableNames(database).Select(table => GetTableDataAsJson(database, table)).ToList();
+            return "[" + string.Join(",", output) + "]";
+        }
+        
+        private void DrawTable(List<List<string>> table)
+        {
+            if (table.Count == 0) return;
+
+            EditorGUILayout.BeginVertical("box");
+            foreach (var row in table)
+            {
+                EditorGUILayout.BeginHorizontal();
+                foreach (var cell in row)
+                {
+                    EditorGUILayout.LabelField(cell, GUILayout.MinWidth(100));
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.EndVertical();
         }
 
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-        GUILayout.Space(5);
 
-        if (!string.IsNullOrEmpty(sqlExecutionMessage))
+        private void ExecuteSqlQuery(Database database)
         {
-            EditorGUILayout.HelpBox(sqlExecutionMessage, MessageType.Info);
+            try
+            {
+                tableData.Clear(); // Clear previous results
+
+                using (var connection = new MySqlConnection(database.ConnectionString))
+                {
+                    connection.Open();
+                    using (var dbCommand = connection.CreateCommand())
+                    {
+                        dbCommand.CommandText = database.SQLQuery;
+
+                        if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            ReadTableResults(dbCommand);
+                        }
+                        else
+                        {
+                            var affectedRows = dbCommand.ExecuteNonQuery();
+                            sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
+                        }
+                    }
+                }
+
+                DrawConnectionsPanel();
+            }
+            catch (Exception ex)
+            {
+                sqlExecutionMessage = "Error: " + ex.Message;
+            }
         }
 
-        if (tableData.Count > 0)
+
+        private void ReadTableResults(IDbCommand dbCommand)
         {
-            DrawQueryResults();
+            using (IDataReader reader = dbCommand.ExecuteReader())
+            {
+                var columnCount = reader.FieldCount;
+                columnNames = new string[columnCount];
+
+                for (int i = 0; i < columnCount; i++)
+                {
+                    columnNames[i] = reader.GetName(i);
+                }
+
+                while (reader.Read())
+                {
+                    string[] row = new string[columnCount];
+                    for (int i = 0; i < columnCount; i++)
+                    {
+                        row[i] = reader.GetValue(i).ToString();
+                    }
+
+                    tableData.Add(row);
+                }
+            }
+
+            sqlExecutionMessage = "Query executed successfully.";
         }
-    }
 
-    private void DrawAIPoweredMode()
-    {
-        EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
-
-        selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
-            aiProviders.Select(p => p.Name).ToArray(), GUILayout.Width(300));
-        aiProvider = aiProviders[selectedAIProviderIndex];
-
-        aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
-
-        provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
-
-        string dataContext = "";
-        if (provideDatabaseData)
+        private void DrawQueryResults()
         {
-            provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
+            GUILayout.Label("Query Results", EditorStyles.boldLabel);
+            sqlScrollPosition = EditorGUILayout.BeginScrollView(sqlScrollPosition, GUILayout.Height(300));
+
+            // Draw column headers
+            if (columnNames.Length > 0)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+                var colStyle = new GUIStyle(EditorStyles.boldLabel);
+                colStyle.fontSize = 14;
+                foreach (string col in columnNames)
+                {
+                    GUILayout.Label(col, colStyle, GUILayout.Width(150), GUILayout.Height(25));
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            // Draw table rows
+            foreach (var row in tableData)
+            {
+                EditorGUILayout.BeginHorizontal();
+                foreach (var cell in row)
+                {
+                    GUILayout.Label(cell, GUILayout.Width(150));
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.EndScrollView();
+        }
+
+        private void DrawStructure()
+        {
+            if (string.IsNullOrEmpty(selectedTableForContent))
+            {
+                EditorGUILayout.LabelField("Select a table to view its structure.", EditorStyles.boldLabel);
+                return;
+            }
 
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            if (!provideEntireDatabase)
-            {
-                if (tableNames.Count == 0)
-                    tableNames = GetTableNames(database);
+            List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? database.GetTableColumns_Maria(selectedTableForContent)
+                : database.GetTableColumns_Lite(selectedTableForContent);
 
-                selectedTableIndex = EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
+            if (columns == null || columns.Count == 0)
+            {
+                EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
+                    EditorStyles.boldLabel);
+                return;
             }
 
-            dataContext = provideEntireDatabase
-                ? GetDatabaseDataAsJson(database)
-                : GetTableDataAsJson(database, tableNames[selectedTableIndex]);
-        }
-
-        GUILayout.Space(5);
-
-        aiApiKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey, GUILayout.Width(600));
-
-        GUILayout.Space(5);
-        if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
-        {
-            string fullSystemPrompt = systemPrompt;
-
-            if (provideDatabaseData && !string.IsNullOrEmpty(dataContext))
+            // Initialize storage lists if not set
+            if (editedColumnNames.Count != columns.Count || selectedColumnTypeIndices.Count != columns.Count)
             {
-                fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
+                editedColumnNames = columns.Select(col => col.Name).ToList();
+                selectedColumnTypeIndices = columns.Select(col => Array.IndexOf(availableColumnTypes, col.Type)).ToList();
+                editedPrimaryKeys = columns.Select(col => col.IsPrimaryKey).ToList();
             }
 
-            aiResponse = "Thinking...";
-            aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
+            scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+
+            // **Save Changes Button**
+            // Ensure selection list is initialized correctly
+            if (columnSelections.Count != columns.Count)
             {
-                aiResponse = response;
-                Repaint();
-            });
-        }
-
-        GUILayout.Space(5);
-        if (!string.IsNullOrEmpty(aiResponse))
-        {
-            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
-            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
-        }
-    }
-
-
-    private List<string> GetTableNames(Database database)
-    {
-        var names = new List<string>();
-        switch (database.ConnectionType)
-        {
-            case DatabaseConnection.EConnectionType.SQLite:
-                using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
-                {
-                    connection.Open();
-                    var cmd = connection.CreateCommand();
-                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            names.Add(reader.GetString(0));
-                        }
-                    }
-                }
-
-                break;
-            case DatabaseConnection.EConnectionType.MySQL:
-                using (var connection = new SqliteConnection(database.ConnectionString))
-                {
-                    connection.Open();
-                    var cmd = connection.CreateCommand();
-                    cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            names.Add(reader.GetString(0));
-                        }
-                    }
-                }
-
-                break;
-        }
-
-        return names;
-    }
-
-    private string GetTableDataAsJson(Database database, string tableName)
-    {
-        var rows = new List<Dictionary<string, object>>();
-
-        switch (database.ConnectionType)
-        {
-            case DatabaseConnection.EConnectionType.SQLite:
-                using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
-                {
-                    connection.Open();
-                    var cmd = connection.CreateCommand();
-                    cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var row = new Dictionary<string, object>();
-                            for (int i = 0; i < reader.FieldCount; i++)
-                            {
-                                object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                                row[reader.GetName(i)] = value;
-                            }
-
-                            rows.Add(row);
-                        }
-                    }
-                }
-
-                break;
-            case DatabaseConnection.EConnectionType.MySQL:
-                using (var connection = new MySqlConnection(database.ConnectionString))
-                {
-                    connection.Open();
-                    var cmd = connection.CreateCommand();
-                    cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
-
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            var row = new Dictionary<string, object>();
-                            for (int i = 0; i < reader.FieldCount; i++)
-                            {
-                                object value = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                                row[reader.GetName(i)] = value;
-                            }
-
-                            rows.Add(row);
-                        }
-                    }
-                }
-
-                break;
-        }
-
-        var wrapper = new
-        {
-            table = tableName,
-            rows
-        };
-
-        return JsonConvert.SerializeObject(wrapper, Formatting.Indented);
-    }
-
-    private string GetDatabaseDataAsJson(Database database)
-    {
-        var output = new List<string>();
-        foreach (var table in GetTableNames(database))
-        {
-            output.Add(GetTableDataAsJson(database, table));
-        }
-
-        return "[" + string.Join(",", output) + "]";
-    }
-
-    [System.Serializable]
-    private class TableWrapper
-    {
-        public string table;
-        public List<Dictionary<string, object>> data;
-    }
-
-
-    private void DrawTable(List<List<string>> table)
-    {
-        if (table.Count == 0) return;
-
-        EditorGUILayout.BeginVertical("box");
-        foreach (var row in table)
-        {
-            EditorGUILayout.BeginHorizontal();
-            foreach (var cell in row)
-            {
-                EditorGUILayout.LabelField(cell, GUILayout.MinWidth(100));
+                columnSelections = new List<bool>(new bool[columns.Count]);
             }
 
-            EditorGUILayout.EndHorizontal();
-        }
-
-        EditorGUILayout.EndVertical();
-    }
-
-
-    private void ExecuteSQLQuery(Database database)
-    {
-        try
-        {
-            tableData.Clear(); // Clear previous results
-
-            using (var connection = new MySqlConnection(database.ConnectionString))
-            {
-                connection.Open();
-                using (var dbCommand = connection.CreateCommand())
-                {
-                    dbCommand.CommandText = database.SQLQuery;
-
-                    if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
-                    {
-                        ReadTableResults(dbCommand);
-                    }
-                    else
-                    {
-                        int affectedRows = dbCommand.ExecuteNonQuery();
-                        sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
-                    }
-                }
-            }
-
-            DrawConnectionsPanel();
-        }
-        catch (Exception ex)
-        {
-            sqlExecutionMessage = "Error: " + ex.Message;
-        }
-    }
-
-
-    private void ReadTableResults(IDbCommand dbCommand)
-    {
-        using (IDataReader reader = dbCommand.ExecuteReader())
-        {
-            int columnCount = reader.FieldCount;
-            columnNames = new string[columnCount];
-
-            for (int i = 0; i < columnCount; i++)
-            {
-                columnNames[i] = reader.GetName(i);
-            }
-
-            while (reader.Read())
-            {
-                string[] row = new string[columnCount];
-                for (int i = 0; i < columnCount; i++)
-                {
-                    row[i] = reader.GetValue(i).ToString();
-                }
-
-                tableData.Add(row);
-            }
-        }
-
-        sqlExecutionMessage = "Query executed successfully.";
-    }
-
-    private void DrawQueryResults()
-    {
-        GUILayout.Label("Query Results", EditorStyles.boldLabel);
-        sqlScrollPosition = EditorGUILayout.BeginScrollView(sqlScrollPosition, GUILayout.Height(300));
-
-        // Draw column headers
-        if (columnNames.Length > 0)
-        {
+            // Bulk Actions Header
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            var colStyle = new GUIStyle(EditorStyles.boldLabel);
-            colStyle.fontSize = 14;
-            // colStyle.alignment = TextAnchor.MiddleCenter;
-            foreach (string col in columnNames)
-            {
-                GUILayout.Label(col, colStyle, GUILayout.Width(150), GUILayout.Height(25));
-            }
+            selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
 
-            EditorGUILayout.EndHorizontal();
-        }
-
-        // Draw table rows
-        foreach (var row in tableData)
-        {
-            EditorGUILayout.BeginHorizontal();
-            foreach (var cell in row)
-            {
-                GUILayout.Label(cell, GUILayout.Width(150));
-            }
-
-            EditorGUILayout.EndHorizontal();
-        }
-
-        EditorGUILayout.EndScrollView();
-    }
-
-
-    private List<bool> columnSelections = new List<bool>();
-    private bool selectAllColumns = false;
-
-    private List<string> editedColumnNames = new List<string>();
-    private List<int> selectedColumnTypeIndices = new List<int>();
-    private List<bool> editedPrimaryKeys = new List<bool>();
-
-    private void DrawStructure()
-    {
-        if (string.IsNullOrEmpty(selectedTableForContent))
-        {
-            EditorGUILayout.LabelField("Select a table to view its structure.", EditorStyles.boldLabel);
-            return;
-        }
-
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-            ? database.GetTableColumns_Maria(selectedTableForContent)
-            : database.GetTableColumns_Lite(selectedTableForContent);
-
-        if (columns == null || columns.Count == 0)
-        {
-            EditorGUILayout.LabelField($"No columns found in table '{selectedTableForContent}'.",
-                EditorStyles.boldLabel);
-            return;
-        }
-
-        // Initialize storage lists if not set
-        if (editedColumnNames.Count != columns.Count || selectedColumnTypeIndices.Count != columns.Count)
-        {
-            editedColumnNames = columns.Select(col => col.Name).ToList();
-            selectedColumnTypeIndices = columns.Select(col => Array.IndexOf(_availableColumnTypes, col.Type)).ToList();
-            editedPrimaryKeys = columns.Select(col => col.IsPrimaryKey).ToList();
-        }
-
-        scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
-
-        // **Save Changes Button**
-        // Ensure selection list is initialized correctly
-        if (columnSelections.Count != columns.Count)
-        {
-            columnSelections = new List<bool>(new bool[columns.Count]);
-        }
-
-        // Bulk Actions Header
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-        selectAllColumns = EditorGUILayout.Toggle(selectAllColumns, GUILayout.Width(20));
-
-        var style = EditorStyles.toolbarButton;
-        style.normal.textColor = Color.white;
-
-        if (GUILayout.Button("Select All", style, GUILayout.Width(100)))
-        {
-            for (int i = 0; i < columnSelections.Count; i++)
-            {
-                columnSelections[i] = selectAllColumns;
-            }
-        }
-
-        GUILayout.FlexibleSpace();
-        if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
-        {
-            PerformBulkColumnAction("View");
-        }
-
-        style.normal.textColor = Color.red;
-        if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
-        {
-            PerformBulkColumnAction("Delete");
-        }
-
-        style.normal.textColor = Color.white;
-        if (GUILayout.Button("💾 Save Changes", style, GUILayout.Width(150)))
-        {
-            SaveColumnChanges(database);
-        }
-
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-
-        // **Table Header**
-// Table header
-        EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-        EditorGUILayout.LabelField("✔", GUILayout.Width(20));
-        EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
-        EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(100));
-        EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
-        EditorGUILayout.EndHorizontal();
-
-// Table rows (with checkboxes)
-        for (int i = 0; i < columns.Count; i++)
-        {
-            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-
-            columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
-            editedColumnNames[i] = EditorGUILayout.TextField(editedColumnNames[i], GUILayout.Width(150));
-            selectedColumnTypeIndices[i] = EditorGUILayout.Popup(selectedColumnTypeIndices[i], _availableColumnTypes,
-                GUILayout.Width(100));
-
-            bool wasPrimaryKey = editedPrimaryKeys[i];
-            editedPrimaryKeys[i] = EditorGUILayout.Toggle(editedPrimaryKeys[i], GUILayout.Width(100));
-
-            if (editedPrimaryKeys[i] && !wasPrimaryKey)
-            {
-                for (int j = 0; j < editedPrimaryKeys.Count; j++)
-                {
-                    if (j != i) editedPrimaryKeys[j] = false;
-                }
-            }
-
+            var style = EditorStyles.toolbarButton;
             style.normal.textColor = Color.white;
+
+            if (GUILayout.Button("Select All", style, GUILayout.Width(100)))
+            {
+                for (int i = 0; i < columnSelections.Count; i++)
+                {
+                    columnSelections[i] = selectAllColumns;
+                }
+            }
+
+            GUILayout.FlexibleSpace();
             if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
             {
-                PerformBulkAction("View", columns[i].Name);
+                PerformBulkColumnAction("View");
             }
 
             style.normal.textColor = Color.red;
             if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
             {
-                PerformBulkAction("Delete", columns[i].Name);
+                PerformBulkColumnAction("Delete");
+            }
+
+            style.normal.textColor = Color.white;
+            if (GUILayout.Button("💾 Save Changes", style, GUILayout.Width(150)))
+            {
+                SaveColumnChanges(database);
+            }
+
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+
+            // **Table Header**
+// Table header
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("✔", GUILayout.Width(20));
+            EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
+            EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(100));
+            EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
+            EditorGUILayout.EndHorizontal();
+
+// Table rows (with checkboxes)
+            for (int i = 0; i < columns.Count; i++)
+            {
+                EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+
+                columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
+                editedColumnNames[i] = EditorGUILayout.TextField(editedColumnNames[i], GUILayout.Width(150));
+                selectedColumnTypeIndices[i] = EditorGUILayout.Popup(selectedColumnTypeIndices[i], availableColumnTypes,
+                    GUILayout.Width(100));
+
+                bool wasPrimaryKey = editedPrimaryKeys[i];
+                editedPrimaryKeys[i] = EditorGUILayout.Toggle(editedPrimaryKeys[i], GUILayout.Width(100));
+
+                if (editedPrimaryKeys[i] && !wasPrimaryKey)
+                {
+                    for (int j = 0; j < editedPrimaryKeys.Count; j++)
+                    {
+                        if (j != i) editedPrimaryKeys[j] = false;
+                    }
+                }
+
+                style.normal.textColor = Color.white;
+                if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
+                {
+                    PerformBulkAction("View", columns[i].Name);
+                }
+
+                style.normal.textColor = Color.red;
+                if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
+                {
+                    PerformBulkAction("Delete", columns[i].Name);
+                }
+
+                EditorGUILayout.EndHorizontal();
+            }
+
+            EditorGUILayout.BeginHorizontal();
+            style.normal.textColor = Color.green;
+            if (GUILayout.Button("➕", style, GUILayout.Width(25), GUILayout.Height(20)))
+            {
+                OpenAddColumnWindow(selectedTableForContent);
             }
 
             EditorGUILayout.EndHorizontal();
+            EditorGUILayout.EndScrollView();
         }
 
-        EditorGUILayout.BeginHorizontal();
-        style.normal.textColor = Color.green;
-        if (GUILayout.Button("➕", style, GUILayout.Width(25), GUILayout.Height(20)))
+        private void PerformBulkColumnAction(string action)
         {
-            OpenAddColumnWindow(selectedTableForContent);
-        }
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
 
-        EditorGUILayout.EndHorizontal();
-        EditorGUILayout.EndScrollView();
-    }
+            List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
+            List<string> selectedColumns = new List<string>();
 
-    private void PerformBulkColumnAction(string action)
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
-        List<string> selectedColumns = new List<string>();
-
-        for (int i = 0; i < columns.Count; i++)
-        {
-            if (columnSelections[i])
+            for (int i = 0; i < columns.Count; i++)
             {
-                selectedColumns.Add(columns[i].Name);
-            }
-        }
-
-        if (selectedColumns.Count == 0) return;
-
-        switch (action)
-        {
-            case "View":
-                selectedTab = 3; // Switch to SQL Tab
-                database.SQLQuery = $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
-                ExecuteSQLQuery(database);
-                break;
-
-            case "Delete":
-                if (EditorUtility.DisplayDialog("Confirm Delete",
-                    $"Are you sure you want to delete {selectedColumns.Count} selected columns?", "Yes", "No"))
+                if (columnSelections[i])
                 {
-                    foreach (string columnName in selectedColumns)
+                    selectedColumns.Add(columns[i].Name);
+                }
+            }
+
+            if (selectedColumns.Count == 0) return;
+
+            switch (action)
+            {
+                case "View":
+                    selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery = $"SELECT {string.Join(", ", selectedColumns)} FROM {selectedTableForContent};";
+                    ExecuteSqlQuery(database);
+                    break;
+
+                case "Delete":
+                    if (EditorUtility.DisplayDialog("Confirm Delete",
+                        $"Are you sure you want to delete {selectedColumns.Count} selected columns?", "Yes", "No"))
                     {
-                        database.DeleteColumn_Maria(selectedTableForContent, columnName);
+                        foreach (string columnName in selectedColumns)
+                        {
+                            database.DeleteColumn_Maria(selectedTableForContent, columnName);
+                        }
+
+                        database.LoadTableContent(selectedTableForContent);
                     }
 
-                    database.LoadTableContent(selectedTableForContent);
-                }
-
-                break;
-        }
-    }
-
-
-    private void SaveColumnChanges(Database database)
-    {
-        for (int i = 0; i < editedColumnNames.Count; i++)
-        {
-            string newColumnName = editedColumnNames[i];
-            string newColumnType = _availableColumnTypes[selectedColumnTypeIndices[i]];
-            bool isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
-
-            // Apply Changes to the Database
-            database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
-        }
-
-        database.LoadTableContent(selectedTableForContent);
-        // Debug.Log("Changes saved successfully!");
-    }
-
-    private Texture2D MakeTex(int width, int height, Color col)
-    {
-        Texture2D result = new Texture2D(width, height);
-        Color[] pix = new Color[width * height];
-
-        for (int i = 0; i < pix.Length; i++)
-        {
-            pix[i] = col; // Preserve transparency
-        }
-
-        result.SetPixels(pix);
-        result.Apply();
-        return result;
-    }
-
-    [System.Serializable]
-    private class KeyValuePairStringBool
-    {
-        public string Key;
-        public bool Value;
-    }
-
-    [System.Serializable]
-    private class KeyValuePairStringList
-    {
-        public string Key;
-        public List<string> Value;
-    }
-
-    [System.Serializable]
-    private class KeyValuePairStringString
-    {
-        public string Key;
-        public string Value;
-    }
-
-    private List<SearchFilter> searchFilters = new List<SearchFilter>();
-
-    public class SearchFilter
-    {
-        public string Column;
-        public string Operator;
-        public string Value;
-    }
-
-
-    [System.Serializable]
-    private class SaveData
-    {
-        public List<string> Connections = new List<string>(); // Stores connection paths
-
-        public List<KeyValuePairStringBool>
-            ExpandedConnections = new List<KeyValuePairStringBool>(); // Stores expanded state of connections
-
-        public List<KeyValuePairStringList>
-            ExpandedDatabases = new List<KeyValuePairStringList>(); // Stores expanded databases per connection
-
-        public List<KeyValuePairStringString>
-            OpenedTables = new List<KeyValuePairStringString>(); // Stores last selected table per connection
-    }
-
-    public bool DoesPrimaryKeyExist(string tableName, string primaryKeyColumn, string keyValue)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
-        {
-            return database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
-        }
-
-        return false;
-    }
-
-    public void AddColumnToTable(string tableName, string columnName, string columnType)
-    {
-        var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-        if (database != null)
-        {
-            database.AddColumn_Maria(tableName, columnName, columnType);
-            database.LoadTableContent(tableName);
-        }
-    }
-
-    private void PerformBulkTableAction(string action)
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        List<string> tables = database.GetTableNames();
-        for (int i = 0; i < tables.Count; i++)
-        {
-            if (tableSelections[i])
-            {
-                ExecuteTableAction(tables[i], action);
+                    break;
             }
         }
-    }
 
-    private void ExecuteTableAction(string tableName, string action)
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
 
-        switch (action)
+        private void SaveColumnChanges(Database database)
         {
-            case "View":
-                selectedTab = 3; // Switch to SQL Tab
-                database.SQLQuery = $"SELECT * FROM {tableName};";
-                ExecuteSQLQuery(database);
-                break;
+            for (int i = 0; i < editedColumnNames.Count; i++)
+            {
+                string newColumnName = editedColumnNames[i];
+                string newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
+                bool isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
 
-            case "Structure":
-                selectedTab = 1; // Switch to Structure Tab
-                selectedTableForContent = tableName;
-                break;
+                // Apply Changes to the Database
+                database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+            }
 
-            case "Search":
-                selectedTab = 2; // Switch to Search Tab
-                selectedTableForContent = tableName;
-                break;
+            database.LoadTableContent(selectedTableForContent);
+            // Debug.Log("Changes saved successfully!");
+        }
 
-            case "Insert":
-                OpenAddRowWindow(tableName);
-                break;
+        private Texture2D MakeTex(int width, int height, Color col)
+        {
+            Texture2D result = new Texture2D(width, height);
+            Color[] pix = new Color[width * height];
 
-            case "Clear":
-                if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{tableName}'?",
-                    "Yes", "No"))
+            for (int i = 0; i < pix.Length; i++)
+            {
+                pix[i] = col; // Preserve transparency
+            }
+
+            result.SetPixels(pix);
+            result.Apply();
+            return result;
+        }
+        
+        public bool DoesPrimaryKeyExist(string tableName, string primaryKeyColumn, string keyValue)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database != null)
+            {
+                return database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
+            }
+
+            return false;
+        }
+
+        public void AddColumnToTable(string tableName, string columnName, string columnType)
+        {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+
+            if (database != null)
+            {
+                database.AddColumn_Maria(tableName, columnName, columnType);
+                database.LoadTableContent(tableName);
+            }
+        }
+
+        private void PerformBulkTableAction(string action)
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            List<string> tables = database.GetTableNames();
+            for (int i = 0; i < tables.Count; i++)
+            {
+                if (tableSelections[i])
                 {
-                    var table = database.Tables.First(t => t.Name == tableName);
-                    table.ClearTable(database);
+                    ExecuteTableAction(tables[i], action);
                 }
-
-                break;
-
-            case "Delete":
-                OpenDeleteTableWindow(database, tableName);
-                break;
+            }
         }
-    }
 
-
-    private void PerformBulkAction(string action, string columnName)
-    {
-        var connection = connections[selectedConnectionIndex];
-        var database = connection.Databases[selectedDatabaseIndex];
-
-        switch (action)
+        private void ExecuteTableAction(string tableName, string action)
         {
-            case "View":
-                selectedTab = 3; // Switch to SQL Tab
-                database.SQLQuery =
-                    $"SELECT {columnName} FROM {selectedTableForContent};";
-                ExecuteSQLQuery(database);
-                break;
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
 
-            case "Edit":
-                OpenChangeColumnWindow(selectedTableForContent, columnName);
-                break;
-            case "Delete":
-                OpenDeleteColumnWindow(selectedTableForContent, columnName);
-                break;
-            case "PrimaryKey":
-                database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
-                break;
+            switch (action)
+            {
+                case "View":
+                    selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery = $"SELECT * FROM {tableName};";
+                    ExecuteSqlQuery(database);
+                    break;
+
+                case "Structure":
+                    selectedTab = 1; // Switch to Structure Tab
+                    selectedTableForContent = tableName;
+                    break;
+
+                case "Search":
+                    selectedTab = 2; // Switch to Search Tab
+                    selectedTableForContent = tableName;
+                    break;
+
+                case "Insert":
+                    OpenAddRowWindow(tableName);
+                    break;
+
+                case "Clear":
+                    if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{tableName}'?",
+                        "Yes", "No"))
+                    {
+                        var table = database.Tables.First(t => t.Name == tableName);
+                        table.ClearTable(database);
+                    }
+
+                    break;
+
+                case "Delete":
+                    OpenDeleteTableWindow(database, tableName);
+                    break;
+            }
         }
-    }
 
-    private bool provideDatabaseData = false;
-    private bool provideEntireDatabase = true;
-    private int selectedTableIndex = 0;
-    private List<string> tableNames = new List<string>(); // обновляется при выборе БД
 
-    private List<IAIProvider> aiProviders;
-    private int selectedAIProviderIndex = 0;
-
-    private string systemPrompt =
-        "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
-
-    private void InitializeProviders()
-    {
-        aiProviders = new List<IAIProvider>
+        private void PerformBulkAction(string action, string columnName)
         {
-            new OpenAIProvider(aiApiKey),
-            new GroqAIProvider(aiApiKey),
-            new DeepSeekAIProvider(aiApiKey),
-            new NvidiaAIProvider(aiApiKey)
-        };
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            switch (action)
+            {
+                case "View":
+                    selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery =
+                        $"SELECT {columnName} FROM {selectedTableForContent};";
+                    ExecuteSqlQuery(database);
+                    break;
+
+                case "Edit":
+                    OpenChangeColumnWindow(selectedTableForContent, columnName);
+                    break;
+                case "Delete":
+                    OpenDeleteColumnWindow(selectedTableForContent, columnName);
+                    break;
+                case "PrimaryKey":
+                    database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
+                    break;
+            }
+        }
+        
+        private void InitializeProviders()
+        {
+            aiProviders = new List<IAIProvider>
+            {
+                new OpenAIProvider(aiApiKey),
+                new GroqAIProvider(aiApiKey),
+                new DeepSeekAIProvider(aiApiKey),
+                new NvidiaAIProvider(aiApiKey)
+            };
+        }
+        
+        #region Serializable Classes (Referencable Data Containers)
+        
+        [System.Serializable]
+        private class TableWrapper
+        {
+            public string table;
+            public List<Dictionary<string, object>> data;
+        }
+        
+        [System.Serializable]
+        private class KeyValuePairStringBool
+        {
+            public string Key;
+            public bool Value;
+        }
+
+        [System.Serializable]
+        private class KeyValuePairStringList
+        {
+            public string Key;
+            public List<string> Value;
+        }
+
+        [System.Serializable]
+        private class KeyValuePairStringString
+        {
+            public string Key;
+            public string Value;
+        }
+
+        [System.Serializable]
+        private class SearchFilter
+        {
+            public string Column;
+            public string Operator;
+            public string Value;
+        }
+        
+        [System.Serializable]
+        private class SaveData
+        {
+            public List<string> Connections = new List<string>(); // Stores connection paths
+
+            public List<KeyValuePairStringBool>
+                ExpandedConnections = new List<KeyValuePairStringBool>(); // Stores expanded state of connections
+
+            public List<KeyValuePairStringList>
+                ExpandedDatabases = new List<KeyValuePairStringList>(); // Stores expanded databases per connection
+
+            public List<KeyValuePairStringString>
+                OpenedTables = new List<KeyValuePairStringString>(); // Stores last selected table per connection
+        }
+        
+        #endregion
     }
 }
