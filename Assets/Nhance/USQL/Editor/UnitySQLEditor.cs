@@ -8,7 +8,6 @@ using Nhance.USQL.AI;
 using Unity.Plastic.Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace Nhance.USQL.Editor
 {
@@ -48,7 +47,6 @@ namespace Nhance.USQL.Editor
 
         private string searchQuery = "";
         private string sqlExecutionMessage = "";
-
         private string selectedTableForContent = "";
 
         // Local connection
@@ -77,6 +75,7 @@ namespace Nhance.USQL.Editor
         private bool selectAllColumns = false;
         private bool provideDatabaseData = false;
         private bool provideEntireDatabase = true;
+        private bool showAISettings = false;
 
         private Vector2 scrollPosition;
         private Vector2 sqlScrollPosition;
@@ -103,9 +102,20 @@ namespace Nhance.USQL.Editor
             if (EditorPrefs.HasKey("UnitySQL_AIKey"))
                 aiApiKey = EditorPrefs.GetString("UnitySQL_AIKey");
 
-            InitializeProviders();
+            InitializeAiProviders();
         }
 
+        private void InitializeAiProviders()
+        {
+            aiProviders = new List<IAIProvider>
+            {
+                new OpenAIProvider(aiApiKey),
+                new GroqAIProvider(aiApiKey),
+                new DeepSeekAIProvider(aiApiKey),
+                new NvidiaAIProvider(aiApiKey)
+            };
+        }
+        
         [MenuItem("Nhance/Tools/UnitySQL Manager")]
         public static void ShowWindow()
         {
@@ -206,10 +216,12 @@ namespace Nhance.USQL.Editor
                 }
 
                 if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                    OpenCreateDatabaseWindow(connection);
+                    GenericModalWindow.Show(new CreateDatabaseContent(this, connection));
 
                 if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                    OpenDeleteConnectionWindow(connection);
+                    GenericModalWindow.Show(new ConfirmationContent(
+                        $"Are you sure you want to delete connection '{connection.Name}'?",
+                        () => RemoveConnection(connection)));
 
                 EditorGUILayout.EndHorizontal();
 
@@ -259,10 +271,12 @@ namespace Nhance.USQL.Editor
                 }
 
                 if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                    OpenCreateTableWindow(database);
+                    GenericModalWindow.Show(new CreateTableContent(database));
 
                 if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
-                    OpenDeleteDatabaseWindow(connection, database);
+                    GenericModalWindow.Show(new ConfirmationContent(
+                        $"Are you sure you want to delete database '{database.Name}'?",
+                        () => RemoveDatabase(connection, database)));
 
                 EditorGUILayout.EndHorizontal();
 
@@ -302,7 +316,9 @@ namespace Nhance.USQL.Editor
                 if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25),
                     GUILayout.Height(20)))
                 {
-                    OpenDeleteTableWindow(database, table.Name);
+                    GenericModalWindow.Show(new ConfirmationContent(
+                        $"Are you sure you want to delete table '{table.Name}'?",
+                        () => database.DeleteTable_Maria(table.Name)));
                 }
             }
 
@@ -349,8 +365,7 @@ namespace Nhance.USQL.Editor
             {
                 saveData.ExpandedConnections.Add(new KeyValuePairStringBool {Key = pair.Key.Path, Value = pair.Value});
             }
-
-            // Store expanded states for databases
+            
             saveData.ExpandedDatabases = new List<KeyValuePairStringList>();
             foreach (var connection in connections)
             {
@@ -600,7 +615,7 @@ namespace Nhance.USQL.Editor
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+            var columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
                 ? database.GetTableColumns_Maria(selectedTableForContent)
                 : database.GetTableColumns_Lite(selectedTableForContent);
 
@@ -616,13 +631,12 @@ namespace Nhance.USQL.Editor
             GUILayout.FlexibleSpace();
             // Search Button
             if (GUILayout.Button("🔍 Search", GUILayout.Height(20)))
-            {
                 ExecuteSearchQuery(database);
-            }
 
             EditorGUILayout.EndHorizontal();
 
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
+            
             // Table Header
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
@@ -648,7 +662,7 @@ namespace Nhance.USQL.Editor
                 EditorGUILayout.LabelField(columns[i].Name, GUILayout.Width(150));
 
                 // Operator Selection (Fixed!)
-                int selectedOperatorIndex = Array.IndexOf(availableOperators, searchFilters[i].Operator);
+                var selectedOperatorIndex = Array.IndexOf(availableOperators, searchFilters[i].Operator);
                 selectedOperatorIndex =
                     EditorGUILayout.Popup(selectedOperatorIndex, availableOperators, GUILayout.Width(100));
                 searchFilters[i].Operator = availableOperators[selectedOperatorIndex];
@@ -660,12 +674,9 @@ namespace Nhance.USQL.Editor
             }
 
             EditorGUILayout.EndScrollView();
-
-            // Display search results
-            if (tableData.Count > 0)
-            {
+            
+            if (tableData.Count > 0) 
                 DrawQueryResults();
-            }
         }
 
         private void ExecuteSearchQuery(Database database)
@@ -847,10 +858,7 @@ namespace Nhance.USQL.Editor
 
             EditorGUILayout.EndScrollView();
         }
-
-        private void OpenCreateTableWindow(Database database) =>
-            GenericModalWindow.Show(new CreateTableContent(database));
-
+        
         private void DrawTableContentUI(Database database)
         {
             if (string.IsNullOrEmpty(selectedTableForContent)) return;
@@ -888,7 +896,7 @@ namespace Nhance.USQL.Editor
                 }
 
                 if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
-                    OpenAddColumnWindow(database, selectedTableForContent);
+                    GenericModalWindow.Show(new AddColumnContent(database, selectedTableForContent));
                 EditorGUILayout.EndHorizontal();
 
                 // **Table Rows**
@@ -972,12 +980,13 @@ namespace Nhance.USQL.Editor
                 };
 
                 if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
-                    OpenAddRowWindow(selectedTableForContent);
+                    GenericModalWindow.Show(new AddRowContent(database, selectedTableForContent));
             }
             else
             {
                 EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
-                if (GUILayout.Button("Add First Row", GUILayout.Height(25))) OpenAddRowWindow(selectedTableForContent);
+                if (GUILayout.Button("Add First Row", GUILayout.Height(25)))
+                    GenericModalWindow.Show(new AddRowContent(database, selectedTableForContent));
             }
 
             EditorGUILayout.BeginHorizontal();
@@ -1001,43 +1010,28 @@ namespace Nhance.USQL.Editor
 
         private void ShowRowContextMenu(string tableName, Dictionary<string, object> rowData)
         {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            if (database == null) return;
+            
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Duplicate Row"), false, () => OpenDuplicateRowWindow(tableName, rowData));
-            menu.AddItem(new GUIContent("Delete Row"), false, () => OpenDeleteRowWindow(tableName, rowData));
+            menu.AddItem(new GUIContent("Duplicate Row"), false, () => 
+                GenericModalWindow.Show(new DuplicateRowContent(database, tableName, rowData)));
+            menu.AddItem(new GUIContent("Delete Row"), false, () => 
+                GenericModalWindow.Show( new DeleteRowConfirmationContent(database, tableName, rowData)));
             menu.ShowAsContext();
         }
-
-        public void DuplicateRow(string tableName, Dictionary<string, object> newRowData)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database == null) return;
-
-            database.InsertRow_Maria(tableName, newRowData);
-            database.LoadTableContent(tableName);
-        }
-
-
-        private void OpenDuplicateRowWindow(string tableName, Dictionary<string, object> rowData)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database == null) return;
-
-            // var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-            //     ? database.GetPrimaryKeyColumn_Maria(tableName)
-            //     : database.GetPrimaryKeyColumn_Lite(tableName);
-
-            GenericModalWindow.Show(new DuplicateRowContent(database, tableName, rowData));
-        }
-
+        
         private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
             string cellValue)
         {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            if (database == null) return;
+            
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Change Value"), false,
-                () => OpenChangeValueWindow(tableName, rowData, columnName, cellValue));
-            menu.AddItem(new GUIContent("Copy"), false, () => CopyCellToClipboard(cellValue));
+            menu.AddItem(new GUIContent("Change Value"), false, () => 
+                GenericModalWindow.Show(new ChangeValueContent(database, tableName, rowData, columnName)));
+            menu.AddItem(new GUIContent("Copy"), false, () => 
+                EditorGUIUtility.systemCopyBuffer = cellValue);
             menu.ShowAsContext();
         }
 
@@ -1054,7 +1048,7 @@ namespace Nhance.USQL.Editor
             };
         }
 
-        public void RemoveConnection(DatabaseConnection connection)
+        private void RemoveConnection(DatabaseConnection connection)
         {
             connections.Remove(connection);
             SaveSessionData();
@@ -1068,48 +1062,7 @@ namespace Nhance.USQL.Editor
             SaveSessionData();
             Debug.Log($"[INFO] Database '{database.Name}' removed.");
         }
-
-        private void OpenDeleteConnectionWindow(DatabaseConnection connection)
-        {
-            GenericModalWindow.Show(new ConfirmationContent(
-                $"Are you sure you want to delete connection '{connection.Name}'?",
-                () => RemoveConnection(connection)));
-        }
-
-        private void OpenDeleteDatabaseWindow(DatabaseConnection connection, Database database)
-        {
-            GenericModalWindow.Show(new ConfirmationContent(
-                $"Are you sure you want to delete database '{database.Name}'?",
-                () => RemoveDatabase(connection, database)));
-        }
-
-        private void OpenDeleteTableWindow(Database database, string tableName)
-        {
-            GenericModalWindow.Show(new ConfirmationContent(
-                $"Are you sure you want to delete table '{tableName}'?",
-                () => database.DeleteTable_Maria(tableName)));
-        }
-
-        private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
-            string cellValue)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database != null && rowData != null)
-            {
-                GenericModalWindow.Show(new ChangeValueContent(database, tableName, rowData, columnName));
-            }
-            else
-            {
-                Debug.LogError("[ERROR] Unable to open change value window. Database or row data is null.");
-            }
-        }
-
-        private void OpenCreateDatabaseWindow(DatabaseConnection connection)
-        {
-            GenericModalWindow.Show(new CreateDatabaseContent(this, connection));
-        }
-
+        
         private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
             object newValue)
         {
@@ -1151,73 +1104,24 @@ namespace Nhance.USQL.Editor
                 Debug.LogError($"[ERROR] Failed to update cell '{columnName}' in table '{tableName}': {e.Message}");
             }
         }
-
-        private void CopyCellToClipboard(string cellValue)
-        {
-            EditorGUIUtility.systemCopyBuffer = cellValue;
-            Debug.Log($"[INFO] Copied value: {cellValue}");
-        }
-
-        private void OpenDeleteRowWindow(string tableName, Dictionary<string, object> rowData)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database != null && rowData != null)
-            {
-                GenericModalWindow.Show( new DeleteRowConfirmationContent(database, tableName, rowData));
-            }
-            else
-            {
-                Debug.LogError("[ERROR] Unable to open delete confirmation window. Database or row data is null.");
-            }
-        }
-
-        private void OpenAddRowWindow(string tableName)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            var openedColumnNames = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetColumnNames_Maria(tableName)
-                : database.GetColumnNames_Lite(tableName);
-
-            GenericModalWindow.Show(new AddRowContent(database, tableName, openedColumnNames));
-        }
-
-        private void OpenAddColumnWindow(Database db, string tableName)
-        {
-            GenericModalWindow.Show(new AddColumnContent(db, tableName));
-        }
-
+        
         private void ShowColumnContextMenu(string columnName, string tableName)
         {
+            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
+            if (database == null) return;
+            
             var menu = new GenericMenu();
-            menu.AddItem(new GUIContent("Edit Column"), false, () => OpenChangeColumnWindow(tableName, columnName));
-            menu.AddItem(new GUIContent("Delete Column"), false, () => OpenDeleteColumnWindow(tableName, columnName));
-            menu.AddItem(new GUIContent("Make Primary Key"), false, () => MakeColumnPrimaryKey(tableName, columnName));
+            menu.AddItem(new GUIContent("Edit Column"), false, () => 
+                GenericModalWindow.Show(new ChangeColumnContent(database, tableName, columnName)));
+            menu.AddItem(new GUIContent("Delete Column"), false, () => 
+                GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, tableName, columnName)));
+            menu.AddItem(new GUIContent("Make Primary Key"), false, () =>
+                {
+                    database.MakePrimaryKey_Maria(tableName, columnName);
+                    database.LoadTableContent(tableName);
+                });
             menu.ShowAsContext();
         }
-
-        private void OpenChangeColumnWindow(string tableName, string columnName)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database == null) return;
-            GenericModalWindow.Show(new ChangeColumnContent(database, tableName, columnName));
-        }
-
-        private void OpenDeleteColumnWindow(string tableName, string columnName)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, tableName, columnName));
-        }
-
-        private void MakeColumnPrimaryKey(string tableName, string columnName)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            database.MakePrimaryKey_Maria(tableName, columnName);
-            database.LoadTableContent(tableName);
-        }
-
-        private bool showAISettings = false;
 
         private void DrawSqlExecutor()
         {
@@ -1330,13 +1234,7 @@ namespace Nhance.USQL.Editor
             var end = response.IndexOf(endTag, start, StringComparison.OrdinalIgnoreCase);
             return end == -1 ? null : response.Substring(start, end - start).Trim();
         }
-
-        private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
-        {
-            var output = tables.Select(table => GetTableDataAsJson(database, table)).ToList();
-            return "[" + string.Join(",", output) + "]";
-        }
-
+        
         private void DrawAISettingsPanel()
         {
             EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
@@ -1451,70 +1349,7 @@ namespace Nhance.USQL.Editor
             if (tableData.Count > 0)
                 DrawQueryResults();
         }
-
-        private void DrawAIPoweredMode()
-        {
-            EditorGUILayout.LabelField("Ask AI to generate or explain SQL", EditorStyles.boldLabel);
-
-            selectedAIProviderIndex = EditorGUILayout.Popup("AI Provider", selectedAIProviderIndex,
-                aiProviders.Select(p => p.Name).ToArray(), GUILayout.Width(300));
-            aiProvider = aiProviders[selectedAIProviderIndex];
-
-            aiPrompt = EditorGUILayout.TextField("Prompt", aiPrompt, GUILayout.Width(600), GUILayout.Height(100));
-
-            provideDatabaseData = EditorGUILayout.Toggle("Provide Database Data", provideDatabaseData);
-
-            var dataContext = "";
-            if (provideDatabaseData)
-            {
-                provideEntireDatabase = EditorGUILayout.Toggle("Provide Entire Database", provideEntireDatabase);
-
-                var connection = connections[selectedConnectionIndex];
-                var database = connection.Databases[selectedDatabaseIndex];
-
-                if (!provideEntireDatabase)
-                {
-                    if (tableNames.Count == 0)
-                        tableNames = GetTableNames(database);
-
-                    selectedTableIndex =
-                        EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
-                }
-
-                dataContext = provideEntireDatabase
-                    ? GetDatabaseDataAsJson(database)
-                    : GetTableDataAsJson(database, tableNames[selectedTableIndex]);
-            }
-
-            GUILayout.Space(5);
-
-            aiApiKey = EditorGUILayout.PasswordField("AI API Key", aiApiKey, GUILayout.Width(600));
-
-            GUILayout.Space(5);
-            if (GUILayout.Button("Send to AI", GUILayout.Width(150), GUILayout.Height(25)))
-            {
-                var fullSystemPrompt = systemPrompt;
-
-                if (provideDatabaseData && !string.IsNullOrEmpty(dataContext))
-                {
-                    fullSystemPrompt += "\n\nHere is the provided data:\n" + dataContext;
-                }
-
-                aiResponse = "Thinking...";
-                aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
-                {
-                    aiResponse = response;
-                    Repaint();
-                });
-            }
-
-            GUILayout.Space(5);
-            if (string.IsNullOrEmpty(aiResponse)) return;
-
-            EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
-            EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
-        }
-
+        
         private List<string> GetTableNames(Database database)
         {
             var names = new List<string>();
@@ -1559,96 +1394,8 @@ namespace Nhance.USQL.Editor
             return names;
         }
 
-        private string GetTableDataAsJson(Database database, string tableName)
-        {
-            var rows = new List<Dictionary<string, object>>();
-
-            switch (database.ConnectionType)
-            {
-                case DatabaseConnection.EConnectionType.SQLite:
-                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
-                    {
-                        connection.Open();
-                        var cmd = connection.CreateCommand();
-                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;";
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                var row = new Dictionary<string, object>();
-                                for (var i = 0; i < reader.FieldCount; i++)
-                                {
-                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                                    row[reader.GetName(i)] = value;
-                                }
-
-                                rows.Add(row);
-                            }
-                        }
-                    }
-
-                    break;
-                case DatabaseConnection.EConnectionType.MySQL:
-                    using (var connection = new MySqlConnection(database.ConnectionString))
-                    {
-                        connection.Open();
-                        var cmd = connection.CreateCommand();
-                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                var row = new Dictionary<string, object>();
-                                for (int i = 0; i < reader.FieldCount; i++)
-                                {
-                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
-                                    row[reader.GetName(i)] = value;
-                                }
-
-                                rows.Add(row);
-                            }
-                        }
-                    }
-
-                    break;
-            }
-
-            var wrapper = new
-            {
-                table = tableName,
-                rows
-            };
-
-            return JsonConvert.SerializeObject(wrapper, Formatting.Indented);
-        }
-
-        private string GetDatabaseDataAsJson(Database database)
-        {
-            var output = GetTableNames(database).Select(table => GetTableDataAsJson(database, table)).ToList();
-            return "[" + string.Join(",", output) + "]";
-        }
-
-        private void DrawTable(List<List<string>> table)
-        {
-            if (table.Count == 0) return;
-
-            EditorGUILayout.BeginVertical("box");
-            foreach (var row in table)
-            {
-                EditorGUILayout.BeginHorizontal();
-                foreach (var cell in row)
-                {
-                    EditorGUILayout.LabelField(cell, GUILayout.MinWidth(100));
-                }
-
-                EditorGUILayout.EndHorizontal();
-            }
-
-            EditorGUILayout.EndVertical();
-        }
-
+        
+        
         private void ExecuteSqlQuery(Database database)
         {
             try
@@ -1875,6 +1622,190 @@ namespace Nhance.USQL.Editor
             EditorGUILayout.EndScrollView();
         }
 
+        private void SaveColumnChanges(Database database)
+        {
+            for (var i = 0; i < editedColumnNames.Count; i++)
+            {
+                var newColumnName = editedColumnNames[i];
+                var newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
+                var isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
+                
+                database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+            }
+
+            database.LoadTableContent(selectedTableForContent);
+        }
+
+        private void ExecuteTableAction(string tableName, string action)
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            switch (action)
+            {
+                case "View":
+                    selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery = $"SELECT * FROM {tableName};";
+                    ExecuteSqlQuery(database);
+                    break;
+
+                case "Structure":
+                    selectedTab = 1; // Switch to Structure Tab
+                    selectedTableForContent = tableName;
+                    break;
+
+                case "Search":
+                    selectedTab = 2; // Switch to Search Tab
+                    selectedTableForContent = tableName;
+                    break;
+
+                case "Insert":
+                    GenericModalWindow.Show(new AddRowContent(database, tableName));
+                    break;
+
+                case "Clear":
+                    if (EditorUtility.DisplayDialog("Confirm Clear",
+                        $"Are you sure you want to clear table '{tableName}'?",
+                        "Yes", "No"))
+                    {
+                        var table = database.Tables.First(t => t.Name == tableName);
+                        table.ClearTable(database);
+                    }
+
+                    break;
+
+                case "Delete":
+                    GenericModalWindow.Show(new ConfirmationContent(
+                        $"Are you sure you want to delete table '{tableName}'?",
+                        () => database.DeleteTable_Maria(tableName)));
+                    break;
+            }
+        }
+
+        #region Json Operations
+
+        private string GetDatabaseDataAsJson(Database database)
+        {
+            var output = GetTableNames(database).Select(table => GetTableDataAsJson(database, table)).ToList();
+            return "[" + string.Join(",", output) + "]";
+        }
+
+        private string GetTableDataAsJson(Database database, string tableName)
+        {
+            var rows = new List<Dictionary<string, object>>();
+
+            switch (database.ConnectionType)
+            {
+                case DatabaseConnection.EConnectionType.SQLite:
+                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;";
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var row = new Dictionary<string, object>();
+                                for (var i = 0; i < reader.FieldCount; i++)
+                                {
+                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    row[reader.GetName(i)] = value;
+                                }
+
+                                rows.Add(row);
+                            }
+                        }
+                    }
+
+                    break;
+                case DatabaseConnection.EConnectionType.MySQL:
+                    using (var connection = new MySqlConnection(database.ConnectionString))
+                    {
+                        connection.Open();
+                        var cmd = connection.CreateCommand();
+                        cmd.CommandText = $"SELECT * FROM {tableName} LIMIT 50;"; // ограничим до 50 строк
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var row = new Dictionary<string, object>();
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    row[reader.GetName(i)] = value;
+                                }
+
+                                rows.Add(row);
+                            }
+                        }
+                    }
+
+                    break;
+            }
+
+            var wrapper = new
+            {
+                table = tableName,
+                rows
+            };
+
+            return JsonConvert.SerializeObject(wrapper, Formatting.Indented);
+        }
+
+        private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
+        {
+            var output = tables.Select(table => GetTableDataAsJson(database, table)).ToList();
+            return "[" + string.Join(",", output) + "]";
+        }
+
+        #endregion
+        
+        #region Bulk Actions
+        
+        private void PerformBulkAction(string action, string columnName)
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            switch (action)
+            {
+                case "View":
+                    selectedTab = 3; // Switch to SQL Tab
+                    database.SQLQuery =
+                        $"SELECT {columnName} FROM {selectedTableForContent};";
+                    ExecuteSqlQuery(database);
+                    break;
+
+                case "Edit":
+                    GenericModalWindow.Show(new ChangeColumnContent(database, selectedTableForContent, columnName));
+                    break;
+                case "Delete":
+                    GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, selectedTableForContent, columnName));
+                    break;
+                case "PrimaryKey":
+                    database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
+                    break;
+            }
+        }
+
+        private void PerformBulkTableAction(string action)
+        {
+            var connection = connections[selectedConnectionIndex];
+            var database = connection.Databases[selectedDatabaseIndex];
+
+            var tables = database.GetTableNames();
+            for (var i = 0; i < tables.Count; i++)
+            {
+                if (tableSelections[i])
+                {
+                    ExecuteTableAction(tables[i], action);
+                }
+            }
+        }
+
         private void PerformBulkColumnAction(string action)
         {
             var connection = connections[selectedConnectionIndex];
@@ -1916,159 +1847,10 @@ namespace Nhance.USQL.Editor
                     break;
             }
         }
-
-        private void SaveColumnChanges(Database database)
-        {
-            for (var i = 0; i < editedColumnNames.Count; i++)
-            {
-                var newColumnName = editedColumnNames[i];
-                var newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
-                var isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
-
-                // Apply Changes to the Database
-                database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
-            }
-
-            database.LoadTableContent(selectedTableForContent);
-            // Debug.Log("Changes saved successfully!");
-        }
-
-        private Texture2D MakeTex(int width, int height, Color col)
-        {
-            var result = new Texture2D(width, height);
-            var pix = new Color[width * height];
-
-            for (int i = 0; i < pix.Length; i++)
-            {
-                pix[i] = col; // Preserve transparency
-            }
-
-            result.SetPixels(pix);
-            result.Apply();
-            return result;
-        }
-
-        public bool DoesPrimaryKeyExist(string tableName, string primaryKeyColumn, string keyValue)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            return database != null && database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
-        }
-
-        public void AddColumnToTable(string tableName, string columnName, string columnType)
-        {
-            var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-
-            if (database == null) return;
-            database.AddColumn_Maria(tableName, columnName, columnType);
-            database.LoadTableContent(tableName);
-        }
-
-        private void PerformBulkTableAction(string action)
-        {
-            var connection = connections[selectedConnectionIndex];
-            var database = connection.Databases[selectedDatabaseIndex];
-
-            var tables = database.GetTableNames();
-            for (var i = 0; i < tables.Count; i++)
-            {
-                if (tableSelections[i])
-                {
-                    ExecuteTableAction(tables[i], action);
-                }
-            }
-        }
-
-        private void ExecuteTableAction(string tableName, string action)
-        {
-            var connection = connections[selectedConnectionIndex];
-            var database = connection.Databases[selectedDatabaseIndex];
-
-            switch (action)
-            {
-                case "View":
-                    selectedTab = 3; // Switch to SQL Tab
-                    database.SQLQuery = $"SELECT * FROM {tableName};";
-                    ExecuteSqlQuery(database);
-                    break;
-
-                case "Structure":
-                    selectedTab = 1; // Switch to Structure Tab
-                    selectedTableForContent = tableName;
-                    break;
-
-                case "Search":
-                    selectedTab = 2; // Switch to Search Tab
-                    selectedTableForContent = tableName;
-                    break;
-
-                case "Insert":
-                    OpenAddRowWindow(tableName);
-                    break;
-
-                case "Clear":
-                    if (EditorUtility.DisplayDialog("Confirm Clear",
-                        $"Are you sure you want to clear table '{tableName}'?",
-                        "Yes", "No"))
-                    {
-                        var table = database.Tables.First(t => t.Name == tableName);
-                        table.ClearTable(database);
-                    }
-
-                    break;
-
-                case "Delete":
-                    OpenDeleteTableWindow(database, tableName);
-                    break;
-            }
-        }
-
-
-        private void PerformBulkAction(string action, string columnName)
-        {
-            var connection = connections[selectedConnectionIndex];
-            var database = connection.Databases[selectedDatabaseIndex];
-
-            switch (action)
-            {
-                case "View":
-                    selectedTab = 3; // Switch to SQL Tab
-                    database.SQLQuery =
-                        $"SELECT {columnName} FROM {selectedTableForContent};";
-                    ExecuteSqlQuery(database);
-                    break;
-
-                case "Edit":
-                    OpenChangeColumnWindow(selectedTableForContent, columnName);
-                    break;
-                case "Delete":
-                    OpenDeleteColumnWindow(selectedTableForContent, columnName);
-                    break;
-                case "PrimaryKey":
-                    database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
-                    break;
-            }
-        }
-
-        private void InitializeProviders()
-        {
-            aiProviders = new List<IAIProvider>
-            {
-                new OpenAIProvider(aiApiKey),
-                new GroqAIProvider(aiApiKey),
-                new DeepSeekAIProvider(aiApiKey),
-                new NvidiaAIProvider(aiApiKey)
-            };
-        }
-
+        
+        #endregion
+        
         #region Serializable Classes (Referencable Data Containers)
-
-        [System.Serializable]
-        private class TableWrapper
-        {
-            public string table;
-            public List<Dictionary<string, object>> data;
-        }
 
         [System.Serializable]
         private class KeyValuePairStringBool

@@ -117,11 +117,15 @@ namespace Nhance.USQL.Editor
         private readonly List<string> _cols;
         private readonly Dictionary<string, string> _values = new Dictionary<string, string>();
 
-        public AddRowContent(Database db, string table, List<string> columns)
+        public AddRowContent(Database db, string table)
         {
             _db = db;
             _table = table;
-            _cols = columns;
+            
+            _cols = db.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? db.GetColumnNames_Maria(table)
+                : db.GetColumnNames_Lite(table);
+            
             foreach (var col in _cols) _values[col] = string.Empty;
         }
 
