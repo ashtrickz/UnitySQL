@@ -709,7 +709,6 @@ namespace Nhance.USQL.Editor
             }
         }
 
-
         private void DrawDatabaseOverview()
         {
             if (connections.Count <= selectedConnectionIndex) return;
@@ -753,31 +752,25 @@ namespace Nhance.USQL.Editor
             if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("View");
             
-
             headerStyle.normal.textColor = new Color(184, 0, 231, 1);
             if (GUILayout.Button("🏗️ Structure", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
                 PerformBulkTableAction("Structure");
             
-
             headerStyle.normal.textColor = Color.cyan;
             if (GUILayout.Button("🔍 Search", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Search");
             
-
             headerStyle.normal.textColor = Color.green;
             if (GUILayout.Button("➕ Insert", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Insert");
             
-
             headerStyle.normal.textColor = Color.yellow;
             if (GUILayout.Button("🗑️ Clear", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Clear");
             
-
             headerStyle.normal.textColor = Color.red;
             if (GUILayout.Button("❌ Delete", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Delete");
-            
 
             EditorGUILayout.EndHorizontal();
 
@@ -1015,12 +1008,14 @@ namespace Nhance.USQL.Editor
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
             if (database == null) return;
+
+            var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? database.GetPrimaryKeyColumn_Maria(tableName)
+                : database.GetPrimaryKeyColumn_Lite(tableName);
             
-            var primaryKeyColumn = database.GetPrimaryKeyColumn_Maria(tableName);
             DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
         }
-
-
+        
         private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
             string cellValue)
         {
@@ -1043,7 +1038,6 @@ namespace Nhance.USQL.Editor
                 _ => value.ToString()
             };
         }
-
 
         public void RemoveConnection(DatabaseConnection connection)
         {
@@ -1114,7 +1108,9 @@ namespace Nhance.USQL.Editor
 
             if (database == null) return;
 
-            var columnType = database.GetColumnType_Maria(tableName, columnName);
+            var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+                ? database.GetColumnType_Maria(tableName, columnName)
+                : database.GetColumnType_Lite(tableName, columnName);
 
             try
             {
@@ -1146,8 +1142,7 @@ namespace Nhance.USQL.Editor
                 Debug.LogError($"[ERROR] Failed to update cell '{columnName}' in table '{tableName}': {e.Message}");
             }
         }
-
-
+        
         private void CopyCellToClipboard(string cellValue)
         {
             EditorGUIUtility.systemCopyBuffer = cellValue;
@@ -1168,14 +1163,14 @@ namespace Nhance.USQL.Editor
             }
         }
 
-
         private void OpenAddRowWindow(string tableName)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            var openedColumnNames = database.GetColumnNames_Maria(tableName);
+            var openedColumnNames = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+                ? database.GetColumnNames_Maria(tableName)
+                : database.GetColumnNames_Lite(tableName);
             AddRowWindow.ShowWindow(database, tableName, openedColumnNames);
         }
-
 
         private void OpenAddColumnWindow(string tableName)
         {
@@ -1198,15 +1193,13 @@ namespace Nhance.USQL.Editor
             if (database == null) return;
             ChangeColumnWindow.ShowWindow(database, tableName, columnName);
         }
-
-
+        
         private void OpenDeleteColumnWindow(string tableName, string columnName)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
             DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
         }
-
-
+        
         private void MakeColumnPrimaryKey(string tableName, string columnName)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -1328,7 +1321,6 @@ namespace Nhance.USQL.Editor
             return end == -1 ? null : response.Substring(start, end - start).Trim();
         }
 
-
         private string GetMultipleTablesDataAsJson(Database database, List<string> tables)
         {
             var output = tables.Select(table => GetTableDataAsJson(database, table)).ToList();
@@ -1389,7 +1381,6 @@ namespace Nhance.USQL.Editor
             aiApiKey = newKey;
             EditorPrefs.SetString("UnitySQL_AIKey", aiApiKey);
         }
-
 
         private void DrawSQLExecutor_ModeSelection()
         {
@@ -1512,8 +1503,7 @@ namespace Nhance.USQL.Editor
             EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
             EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
         }
-
-
+        
         private List<string> GetTableNames(Database database)
         {
             var names = new List<string>();
@@ -1647,8 +1637,7 @@ namespace Nhance.USQL.Editor
 
             EditorGUILayout.EndVertical();
         }
-
-
+        
         private void ExecuteSqlQuery(Database database)
         {
             try
@@ -1681,8 +1670,7 @@ namespace Nhance.USQL.Editor
                 sqlExecutionMessage = "Error: " + ex.Message;
             }
         }
-
-
+        
         private void ReadTableResults(IDbCommand dbCommand)
         {
             using (IDataReader reader = dbCommand.ExecuteReader())
@@ -1916,15 +1904,14 @@ namespace Nhance.USQL.Editor
                     break;
             }
         }
-
-
+        
         private void SaveColumnChanges(Database database)
         {
-            for (int i = 0; i < editedColumnNames.Count; i++)
+            for (var i = 0; i < editedColumnNames.Count; i++)
             {
-                string newColumnName = editedColumnNames[i];
-                string newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
-                bool isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
+                var newColumnName = editedColumnNames[i];
+                var newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
+                var isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
 
                 // Apply Changes to the Database
                 database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
@@ -1936,8 +1923,8 @@ namespace Nhance.USQL.Editor
 
         private Texture2D MakeTex(int width, int height, Color col)
         {
-            Texture2D result = new Texture2D(width, height);
-            Color[] pix = new Color[width * height];
+            var result = new Texture2D(width, height);
+            var pix = new Color[width * height];
 
             for (int i = 0; i < pix.Length; i++)
             {
@@ -1953,23 +1940,16 @@ namespace Nhance.USQL.Editor
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
-            if (database != null)
-            {
-                return database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
-            }
-
-            return false;
+            return database != null && database.CheckPrimaryKeyExists_Maria(tableName, primaryKeyColumn, keyValue);
         }
 
         public void AddColumnToTable(string tableName, string columnName, string columnType)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
-            if (database != null)
-            {
-                database.AddColumn_Maria(tableName, columnName, columnType);
-                database.LoadTableContent(tableName);
-            }
+            if (database == null) return;
+            database.AddColumn_Maria(tableName, columnName, columnType);
+            database.LoadTableContent(tableName);
         }
 
         private void PerformBulkTableAction(string action)
@@ -1977,8 +1957,8 @@ namespace Nhance.USQL.Editor
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            List<string> tables = database.GetTableNames();
-            for (int i = 0; i < tables.Count; i++)
+            var tables = database.GetTableNames();
+            for (var i = 0; i < tables.Count; i++)
             {
                 if (tableSelections[i])
                 {

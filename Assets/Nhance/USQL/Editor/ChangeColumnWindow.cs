@@ -19,7 +19,10 @@ public class ChangeColumnWindow : EditorWindow
         columnName = colName;
         newColumnName = colName;
 
-        currentColumnType = database.GetColumnType_Maria(tableName, columnName);
+        currentColumnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+            ? database.GetColumnType_Maria(tableName, columnName)
+            : database.GetColumnType_Lite(tableName, columnName);
+        
         selectedTypeIndex = System.Array.IndexOf(columnTypes, currentColumnType);
         if (selectedTypeIndex == -1) selectedTypeIndex = 0; // Default to TEXT if unknown type
 
