@@ -25,44 +25,53 @@ namespace Nhance.USQL.Editor
             Manual,
             AIPowered
         }
-    
+
         private EConnectionType selectedConnectionType = EConnectionType.Local;
         private EsqlMode currentMode = EsqlMode.Manual;
-    
+
         private const int RowsPerPage = 10;
         private const string SaveKey = "UnitySQLManager_SaveData";
-    
+
         private readonly string[] tabs = {"Overview", "Structure", "Search", "SQL"};
-        private readonly string[] availableColumnTypes = {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
+
+        private readonly string[] availableColumnTypes =
+            {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
+
         private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
-    
+
         private int selectedConnectionIndex = -1;
         private int selectedDatabaseIndex = -1;
         private int selectedTab = 0;
         private int currentPage = 0;
         private int selectedTableIndex = 0;
         private int selectedAIProviderIndex = 0;
-        
+
         private string searchQuery = "";
         private string sqlExecutionMessage = "";
+
         private string selectedTableForContent = "";
+
         // Local connection
         private string localDatabasePath = "";
+
         // Remote connection
         private string remoteServerAddress = "127.0.0.1";
         private string remoteDatabaseName = "";
         private string remoteUserID = "";
         private string remotePassword = "";
+
         private string remoteSSLMode = "None";
+
         // AI
         private string aiPrompt = "";
         private string aiResponse = "";
         private string aiApiKey = "sk-...";
+
         private string systemPrompt =
             "You are a helpful SQL assistant. If the user provides database structure or actual table data, base your response directly on this information.  \n- If the user asks for a value (e.g., “what is the first name in testTable”), do not return SQL, but the actual value from the provided data.  \n- If the user asks for a query (e.g., “write a query to get all users”), then return SQL.  \nAlways respond briefly and clearly, and only with what was requested (either SQL or data).\n";
 
         private string[] columnNames = new string[0];
-    
+
         private bool showAddConnectionForm = false;
         private bool selectAllTables = false;
         private bool selectAllColumns = false;
@@ -86,9 +95,9 @@ namespace Nhance.USQL.Editor
 
         private Dictionary<DatabaseConnection, bool> connectionStates = new Dictionary<DatabaseConnection, bool>();
         private Dictionary<Database, bool> databaseStates = new Dictionary<Database, bool>();
-        
+
         private IAIProvider aiProvider;
-    
+
         private void OnEnable()
         {
             if (EditorPrefs.HasKey("UnitySQL_AIKey"))
@@ -96,7 +105,7 @@ namespace Nhance.USQL.Editor
 
             InitializeProviders();
         }
-        
+
         [MenuItem("Nhance/Tools/UnitySQL Manager")]
         public static void ShowWindow()
         {
@@ -187,8 +196,8 @@ namespace Nhance.USQL.Editor
                 GUILayout.Space(5);
                 EditorGUILayout.BeginHorizontal();
 
-                bool isConnectionExpanded = connectionStates[connection];
-                string connectionArrow = isConnectionExpanded ? "▼" : "▶";
+                var isConnectionExpanded = connectionStates[connection];
+                var connectionArrow = isConnectionExpanded ? "▼" : "▶";
 
                 if (GUILayout.Button($" {connectionArrow} {connection.Name} connection", EditorStyles.boldLabel))
                 {
@@ -289,7 +298,7 @@ namespace Nhance.USQL.Editor
                 selectedTableForContent = table.Name;
                 database.LoadTableContent(selectedTableForContent);
                 SaveSessionData();
-            
+
                 if (GUILayout.Button("❌", EditorStyles.boldLabel, GUILayout.Width(25),
                     GUILayout.Height(20)))
                 {
@@ -325,7 +334,7 @@ namespace Nhance.USQL.Editor
         }
 
         #endregion
-        
+
         #region WindowData Handling
 
         public void SaveSessionData()
@@ -354,7 +363,7 @@ namespace Nhance.USQL.Editor
                 saveData.ExpandedDatabases.Add(
                     new KeyValuePairStringList {Key = connection.Path, Value = expandedDbs});
             }
-            
+
             saveData.OpenedTables = new List<KeyValuePairStringString>();
             foreach (var connection in connections)
             {
@@ -370,7 +379,7 @@ namespace Nhance.USQL.Editor
                     }
                 }
             }
-            
+
             var json = JsonUtility.ToJson(saveData, true);
             EditorPrefs.SetString(SaveKey, json);
         }
@@ -392,10 +401,10 @@ namespace Nhance.USQL.Editor
                     connections.Add(connection);
                 }
             }
-            
+
             connectionStates.Clear();
             if (saveData == null) return;
-            
+
             foreach (var pair in saveData.ExpandedConnections)
             {
                 var connection = connections.FirstOrDefault(c => c.Path == pair.Key);
@@ -404,14 +413,18 @@ namespace Nhance.USQL.Editor
                     connectionStates[connection] = pair.Value;
                 }
             }
-            
+
             databaseStates.Clear();
-            foreach (var db in from pair in saveData.ExpandedDatabases let connection = connections.FirstOrDefault(c => c.Path == pair.Key)
-                where connection != null from db in connection.Databases where pair.Value.Contains(db.Name) select db)
+            foreach (var db in from pair in saveData.ExpandedDatabases
+                let connection = connections.FirstOrDefault(c => c.Path == pair.Key)
+                where connection != null
+                from db in connection.Databases
+                where pair.Value.Contains(db.Name)
+                select db)
             {
                 databaseStates[db] = true;
             }
-            
+
             if (saveData.OpenedTables.Count > 0)
             {
                 foreach (var pair in saveData.OpenedTables)
@@ -676,7 +689,8 @@ namespace Nhance.USQL.Editor
                 switch (database.ConnectionType)
                 {
                     case DatabaseConnection.EConnectionType.SQLite:
-                        using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                        using (var connection =
+                            new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
                         {
                             connection.Open();
                             using (var dbCommand = connection.CreateCommand())
@@ -751,23 +765,23 @@ namespace Nhance.USQL.Editor
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("📄 View", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("View");
-            
+
             headerStyle.normal.textColor = new Color(184, 0, 231, 1);
             if (GUILayout.Button("🏗️ Structure", headerStyle, GUILayout.Width(100), GUILayout.Height(25)))
                 PerformBulkTableAction("Structure");
-            
+
             headerStyle.normal.textColor = Color.cyan;
             if (GUILayout.Button("🔍 Search", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Search");
-            
+
             headerStyle.normal.textColor = Color.green;
             if (GUILayout.Button("➕ Insert", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Insert");
-            
+
             headerStyle.normal.textColor = Color.yellow;
             if (GUILayout.Button("🗑️ Clear", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Clear");
-            
+
             headerStyle.normal.textColor = Color.red;
             if (GUILayout.Button("❌ Delete", headerStyle, GUILayout.Width(80), GUILayout.Height(25)))
                 PerformBulkTableAction("Delete");
@@ -795,21 +809,21 @@ namespace Nhance.USQL.Editor
                 // Action Buttons for Each Table
                 if (GUILayout.Button("📄 View", style, GUILayout.Width(80)))
                     ExecuteTableAction(table, "View");
-                
+
 
                 GUILayout.Space(5);
                 style.normal.textColor = new Color(184, 0, 231, 1);
 
                 if (GUILayout.Button("🏗️ Structure", style, GUILayout.Width(100)))
                     ExecuteTableAction(table, "Structure");
-                
+
 
                 GUILayout.Space(5);
                 style.normal.textColor = Color.cyan;
 
                 if (GUILayout.Button("🔍 Search", style, GUILayout.Width(80)))
                     ExecuteTableAction(table, "Search");
-                
+
                 GUILayout.Space(5);
                 style.normal.textColor = Color.green;
 
@@ -821,20 +835,21 @@ namespace Nhance.USQL.Editor
 
                 if (GUILayout.Button("🗑️ Clear", style, GUILayout.Width(80)))
                     ExecuteTableAction(table, "Clear");
-                
+
                 GUILayout.Space(5);
                 style.normal.textColor = Color.red;
 
                 if (GUILayout.Button("❌ Delete", style, GUILayout.Width(80)))
                     ExecuteTableAction(table, "Delete");
-                
+
                 EditorGUILayout.EndHorizontal();
             }
 
             EditorGUILayout.EndScrollView();
         }
-        
-        private void OpenCreateTableWindow(Database database) => CreateTableWindow.ShowWindow(database);
+
+        private void OpenCreateTableWindow(Database database) =>
+            GenericModalWindow.Show(new CreateTableContent(database));
 
         private void DrawTableContentUI(Database database)
         {
@@ -873,7 +888,7 @@ namespace Nhance.USQL.Editor
                 }
 
                 if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
-                    OpenAddColumnWindow(selectedTableForContent);
+                    OpenAddColumnWindow(database, selectedTableForContent);
                 EditorGUILayout.EndHorizontal();
 
                 // **Table Rows**
@@ -955,7 +970,7 @@ namespace Nhance.USQL.Editor
                         textColor = Color.green
                     }
                 };
-                
+
                 if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
                     OpenAddRowWindow(selectedTableForContent);
             }
@@ -976,7 +991,7 @@ namespace Nhance.USQL.Editor
 
             if (GUILayout.Button("▶", EditorStyles.boldLabel, GUILayout.Width(25)) && currentPage < totalPages - 1)
                 currentPage++;
-            
+
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
 
@@ -997,7 +1012,7 @@ namespace Nhance.USQL.Editor
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
             if (database == null) return;
-            
+
             database.InsertRow_Maria(tableName, newRowData);
             database.LoadTableContent(tableName);
         }
@@ -1009,13 +1024,13 @@ namespace Nhance.USQL.Editor
 
             if (database == null) return;
 
-            var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetPrimaryKeyColumn_Maria(tableName)
-                : database.GetPrimaryKeyColumn_Lite(tableName);
-            
-            DuplicateRowWindow.ShowWindow(this, tableName, rowData, primaryKeyColumn, database);
+            // var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
+            //     ? database.GetPrimaryKeyColumn_Maria(tableName)
+            //     : database.GetPrimaryKeyColumn_Lite(tableName);
+
+            GenericModalWindow.Show(new DuplicateRowContent(database, tableName, rowData));
         }
-        
+
         private void ShowCellContextMenu(string tableName, Dictionary<string, object> rowData, string columnName,
             string cellValue)
         {
@@ -1056,29 +1071,23 @@ namespace Nhance.USQL.Editor
 
         private void OpenDeleteConnectionWindow(DatabaseConnection connection)
         {
-            ConfirmationWindow.ShowWindow(
-                "Delete Connection",
+            GenericModalWindow.Show(new ConfirmationContent(
                 $"Are you sure you want to delete connection '{connection.Name}'?",
-                () => RemoveConnection(connection)
-            );
+                () => RemoveConnection(connection)));
         }
 
         private void OpenDeleteDatabaseWindow(DatabaseConnection connection, Database database)
         {
-            ConfirmationWindow.ShowWindow(
-                "Delete Database",
+            GenericModalWindow.Show(new ConfirmationContent(
                 $"Are you sure you want to delete database '{database.Name}'?",
-                () => RemoveDatabase(connection, database)
-            );
+                () => RemoveDatabase(connection, database)));
         }
 
         private void OpenDeleteTableWindow(Database database, string tableName)
         {
-            ConfirmationWindow.ShowWindow(
-                "Delete Table",
+            GenericModalWindow.Show(new ConfirmationContent(
                 $"Are you sure you want to delete table '{tableName}'?",
-                () => database.DeleteTable_Maria(tableName)
-            );
+                () => database.DeleteTable_Maria(tableName)));
         }
 
         private void OpenChangeValueWindow(string tableName, Dictionary<string, object> rowData, string columnName,
@@ -1088,7 +1097,7 @@ namespace Nhance.USQL.Editor
 
             if (database != null && rowData != null)
             {
-                ChangeValueWindow.ShowWindow(database, tableName, rowData, columnName, cellValue);
+                GenericModalWindow.Show(new ChangeValueContent(database, tableName, rowData, columnName));
             }
             else
             {
@@ -1098,7 +1107,7 @@ namespace Nhance.USQL.Editor
 
         private void OpenCreateDatabaseWindow(DatabaseConnection connection)
         {
-            CreateDatabaseWindow.ShowWindow(this, connection);
+            GenericModalWindow.Show(new CreateDatabaseContent(this, connection));
         }
 
         private void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
@@ -1108,7 +1117,7 @@ namespace Nhance.USQL.Editor
 
             if (database == null) return;
 
-            var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL 
+            var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
                 ? database.GetColumnType_Maria(tableName, columnName)
                 : database.GetColumnType_Lite(tableName, columnName);
 
@@ -1142,7 +1151,7 @@ namespace Nhance.USQL.Editor
                 Debug.LogError($"[ERROR] Failed to update cell '{columnName}' in table '{tableName}': {e.Message}");
             }
         }
-        
+
         private void CopyCellToClipboard(string cellValue)
         {
             EditorGUIUtility.systemCopyBuffer = cellValue;
@@ -1155,7 +1164,7 @@ namespace Nhance.USQL.Editor
 
             if (database != null && rowData != null)
             {
-                DeleteRowConfirmationWindow.ShowWindow(database, tableName, rowData);
+                GenericModalWindow.Show( new DeleteRowConfirmationContent(database, tableName, rowData));
             }
             else
             {
@@ -1169,12 +1178,13 @@ namespace Nhance.USQL.Editor
             var openedColumnNames = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
                 ? database.GetColumnNames_Maria(tableName)
                 : database.GetColumnNames_Lite(tableName);
-            AddRowWindow.ShowWindow(database, tableName, openedColumnNames);
+
+            GenericModalWindow.Show(new AddRowContent(database, tableName, openedColumnNames));
         }
 
-        private void OpenAddColumnWindow(string tableName)
+        private void OpenAddColumnWindow(Database db, string tableName)
         {
-            AddColumnWindow.ShowWindow(this, tableName);
+            GenericModalWindow.Show(new AddColumnContent(db, tableName));
         }
 
         private void ShowColumnContextMenu(string columnName, string tableName)
@@ -1191,15 +1201,15 @@ namespace Nhance.USQL.Editor
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
 
             if (database == null) return;
-            ChangeColumnWindow.ShowWindow(database, tableName, columnName);
+            GenericModalWindow.Show(new ChangeColumnContent(database, tableName, columnName));
         }
-        
+
         private void OpenDeleteColumnWindow(string tableName, string columnName)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
-            DeleteColumnConfirmationWindow.ShowWindow(database, tableName, columnName);
+            GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, tableName, columnName));
         }
-        
+
         private void MakeColumnPrimaryKey(string tableName, string columnName)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -1287,7 +1297,7 @@ namespace Nhance.USQL.Editor
                 aiProvider.SendPrompt(aiPrompt, fullSystemPrompt, (response) =>
                 {
                     aiResponse = response;
-                    
+
                     var extracted = ExtractSqlFromMarkdown(response);
                     if (!string.IsNullOrEmpty(extracted))
                     {
@@ -1303,7 +1313,7 @@ namespace Nhance.USQL.Editor
 
             GUILayout.Space(5);
             if (string.IsNullOrEmpty(aiResponse)) return;
-            
+
             EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
             EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
         }
@@ -1326,7 +1336,7 @@ namespace Nhance.USQL.Editor
             var output = tables.Select(table => GetTableDataAsJson(database, table)).ToList();
             return "[" + string.Join(",", output) + "]";
         }
-        
+
         private void DrawAISettingsPanel()
         {
             EditorGUILayout.LabelField("Settings", EditorStyles.boldLabel);
@@ -1427,9 +1437,9 @@ namespace Nhance.USQL.Editor
             GUILayout.Space(5);
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            
+
             if (GUILayout.Button("Execute", GUILayout.Width(200), GUILayout.Height(25)))
-                ExecuteSqlQuery(database); 
+                ExecuteSqlQuery(database);
 
             GUILayout.FlexibleSpace();
             EditorGUILayout.EndHorizontal();
@@ -1467,7 +1477,8 @@ namespace Nhance.USQL.Editor
                     if (tableNames.Count == 0)
                         tableNames = GetTableNames(database);
 
-                    selectedTableIndex = EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
+                    selectedTableIndex =
+                        EditorGUILayout.Popup("Select Table", selectedTableIndex, tableNames.ToArray());
                 }
 
                 dataContext = provideEntireDatabase
@@ -1499,11 +1510,11 @@ namespace Nhance.USQL.Editor
 
             GUILayout.Space(5);
             if (string.IsNullOrEmpty(aiResponse)) return;
-            
+
             EditorGUILayout.LabelField("AI Response:", EditorStyles.boldLabel);
             EditorGUILayout.TextArea(aiResponse, GUILayout.Height(100));
         }
-        
+
         private List<string> GetTableNames(Database database)
         {
             var names = new List<string>();
@@ -1618,7 +1629,7 @@ namespace Nhance.USQL.Editor
             var output = GetTableNames(database).Select(table => GetTableDataAsJson(database, table)).ToList();
             return "[" + string.Join(",", output) + "]";
         }
-        
+
         private void DrawTable(List<List<string>> table)
         {
             if (table.Count == 0) return;
@@ -1637,7 +1648,7 @@ namespace Nhance.USQL.Editor
 
             EditorGUILayout.EndVertical();
         }
-        
+
         private void ExecuteSqlQuery(Database database)
         {
             try
@@ -1670,7 +1681,7 @@ namespace Nhance.USQL.Editor
                 sqlExecutionMessage = "Error: " + ex.Message;
             }
         }
-        
+
         private void ReadTableResults(IDbCommand dbCommand)
         {
             using (IDataReader reader = dbCommand.ExecuteReader())
@@ -1758,7 +1769,8 @@ namespace Nhance.USQL.Editor
             if (editedColumnNames.Count != columns.Count || selectedColumnTypeIndices.Count != columns.Count)
             {
                 editedColumnNames = columns.Select(col => col.Name).ToList();
-                selectedColumnTypeIndices = columns.Select(col => Array.IndexOf(availableColumnTypes, col.Type)).ToList();
+                selectedColumnTypeIndices =
+                    columns.Select(col => Array.IndexOf(availableColumnTypes, col.Type)).ToList();
                 editedPrimaryKeys = columns.Select(col => col.IsPrimaryKey).ToList();
             }
 
@@ -1856,7 +1868,7 @@ namespace Nhance.USQL.Editor
             style.normal.textColor = Color.green;
             if (GUILayout.Button("➕", style, GUILayout.Width(25), GUILayout.Height(20)))
             {
-                OpenAddColumnWindow(selectedTableForContent);
+                GenericModalWindow.Show(new AddColumnContent(database, selectedTableForContent));
             }
 
             EditorGUILayout.EndHorizontal();
@@ -1904,7 +1916,7 @@ namespace Nhance.USQL.Editor
                     break;
             }
         }
-        
+
         private void SaveColumnChanges(Database database)
         {
             for (var i = 0; i < editedColumnNames.Count; i++)
@@ -1935,7 +1947,7 @@ namespace Nhance.USQL.Editor
             result.Apply();
             return result;
         }
-        
+
         public bool DoesPrimaryKeyExist(string tableName, string primaryKeyColumn, string keyValue)
         {
             var database = connections[selectedConnectionIndex].Databases[selectedDatabaseIndex];
@@ -1995,7 +2007,8 @@ namespace Nhance.USQL.Editor
                     break;
 
                 case "Clear":
-                    if (EditorUtility.DisplayDialog("Confirm Clear", $"Are you sure you want to clear table '{tableName}'?",
+                    if (EditorUtility.DisplayDialog("Confirm Clear",
+                        $"Are you sure you want to clear table '{tableName}'?",
                         "Yes", "No"))
                     {
                         var table = database.Tables.First(t => t.Name == tableName);
@@ -2036,7 +2049,7 @@ namespace Nhance.USQL.Editor
                     break;
             }
         }
-        
+
         private void InitializeProviders()
         {
             aiProviders = new List<IAIProvider>
@@ -2047,16 +2060,16 @@ namespace Nhance.USQL.Editor
                 new NvidiaAIProvider(aiApiKey)
             };
         }
-        
+
         #region Serializable Classes (Referencable Data Containers)
-        
+
         [System.Serializable]
         private class TableWrapper
         {
             public string table;
             public List<Dictionary<string, object>> data;
         }
-        
+
         [System.Serializable]
         private class KeyValuePairStringBool
         {
@@ -2085,7 +2098,7 @@ namespace Nhance.USQL.Editor
             public string Operator;
             public string Value;
         }
-        
+
         [System.Serializable]
         private class SaveData
         {
@@ -2100,7 +2113,7 @@ namespace Nhance.USQL.Editor
             public List<KeyValuePairStringString>
                 OpenedTables = new List<KeyValuePairStringString>(); // Stores last selected table per connection
         }
-        
+
         #endregion
     }
 }
