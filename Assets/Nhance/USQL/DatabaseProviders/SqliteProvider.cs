@@ -24,8 +24,7 @@ namespace Nhance.USQL.DatabaseProviders
                 names.Add(rdr.GetString(0));
             return names;
         }
-
-        // No internal cache—Database.RefreshTables() will use GetTableNames()
+        
         public void RefreshTables()
         {
         }
@@ -147,7 +146,7 @@ namespace Nhance.USQL.DatabaseProviders
                     }
                     catch
                     {
-                        /* ignore */
+                        // ignored
                     }
                 }
 
@@ -268,18 +267,13 @@ namespace Nhance.USQL.DatabaseProviders
             cmd.CommandText = $"ALTER TABLE {tableName} DROP COLUMN {columnName};";
             cmd.ExecuteNonQuery();
         }
-
-        // For brevity, the large routines for ChangeColumnType_Lite and MakePrimaryKey_Lite
-        // can be copied verbatim from your Database.cs (`ChangeColumnType_Lite` :contentReference[oaicite:3]{index=3},
-        // `MakePrimaryKey_Lite` :contentReference[oaicite:4]{index=4}).
+        
         public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
         {
-            /* … */
         }
 
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
-            /* … */
         }
     }
 }

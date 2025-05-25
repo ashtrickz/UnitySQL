@@ -146,7 +146,9 @@ namespace Nhance.USQL.DatabaseProviders
             cmd.Parameters.AddWithValue("@table", tableName);
             cmd.Parameters.AddWithValue("@column", columnName);
             var type = (cmd.ExecuteScalar()?.ToString() ?? "TEXT").ToUpper();
-            // You can add the same Vector2/Vector3 inference here if desired…
+            
+            // TODO: Vector2/3 inference
+            
             return type;
         }
 
@@ -265,17 +267,13 @@ namespace Nhance.USQL.DatabaseProviders
                 $"ALTER TABLE `{tableName}` DROP COLUMN `{columnName}`;", conn);
             cmd.ExecuteNonQuery();
         }
-
-        // For completeness, copy your `ChangeColumnType_Maria` 
-        // and `MakePrimaryKey_Maria` :contentReference[oaicite:9]{index=9} routines here
+        
         public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
         {
-            /* … */
         }
 
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
-            /* … */
         }
     }
 }
