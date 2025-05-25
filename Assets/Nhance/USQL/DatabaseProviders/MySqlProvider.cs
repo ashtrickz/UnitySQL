@@ -52,6 +52,14 @@ namespace Nhance.USQL.DatabaseProviders
             cmd.ExecuteNonQuery();
         }
 
+        public void ClearTable(string tableName)
+        {
+            using var connection = new MySqlConnection(_connectionString);
+            connection.Open();
+            using var command = new MySqlCommand($"TRUNCATE TABLE `{tableName}`;", connection);
+            command.ExecuteNonQuery();
+        }
+        
         public void DeleteTable(string tableName)
         {
             using var conn = new MySqlConnection(_connectionString);
@@ -62,18 +70,14 @@ namespace Nhance.USQL.DatabaseProviders
         
         public void LoadTables(List<Table> tables)
         {
-            using (var connection = new MySqlConnection(_connectionString))
-            {
-                connection.Open();
+            using var connection = new MySqlConnection(_connectionString);
+            connection.Open();
 
-                using (var command = new MySqlCommand("SHOW TABLES;", connection))
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        tables.Add(new Table(reader.GetString(0)));
-                    }
-                }
+            using var command = new MySqlCommand("SHOW TABLES;", connection);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                tables.Add(new Table(reader.GetString(0)));
             }
         }
         

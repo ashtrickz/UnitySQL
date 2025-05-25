@@ -17,7 +17,7 @@ namespace Nhance.USQL.Data
         public EConnectionType ConnectionType;
 
         private readonly IDatabaseProvider provider;
-        
+
         public Database(string name, string connectionString, EConnectionType type)
         {
             Name = name;
@@ -37,12 +37,15 @@ namespace Nhance.USQL.Data
 
         public void LoadTableContent(string tableName)
             => Tables.FirstOrDefault(t => t.Name == tableName)?.LoadContent(this);
-        
+
         public void CreateTable(string tableName, List<ColumnDefinition> columnDefinitions, int primaryKeyIndex)
             => provider.CreateTable(tableName, columnDefinitions, primaryKeyIndex);
 
         public List<string> GetTableNames()
             => Tables.Select(table => table.Name).ToList();
+
+        public void ClearTable(string tableName)
+            => provider.ClearTable(tableName);
         
         public void DeleteTable(string tableName)
             => provider.DeleteTable(tableName);
@@ -52,14 +55,14 @@ namespace Nhance.USQL.Data
 
         public List<TableColumn> GetTableColumns(string selectedTableForContent)
             => provider.GetTableColumns(selectedTableForContent);
-        
+
         public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
             => provider.ModifyColumn(tableName, columnIndex, newName, newType, isPrimaryKey);
 
         public string GetPrimaryKeyColumn(string selectedTableForContent)
             => provider.GetPrimaryKeyColumn(selectedTableForContent);
-        
-        public void MakePrimaryKeyColumn(string tableName, string columnName) 
+
+        public void MakePrimaryKeyColumn(string tableName, string columnName)
             => provider.MakePrimaryKey(tableName, columnName);
 
         public void DeleteColumn(string tableName, string columnName)
@@ -67,7 +70,7 @@ namespace Nhance.USQL.Data
 
         public List<string> GetColumnNames(string table)
             => provider.GetColumnNames(table);
-        
+
         public string GetColumnType(string selectedTableForContent, string column)
             => provider.GetColumnType(selectedTableForContent, column);
 
@@ -93,5 +96,6 @@ namespace Nhance.USQL.Data
             public string Name;
             public string Type;
         }
+        
     }
 }

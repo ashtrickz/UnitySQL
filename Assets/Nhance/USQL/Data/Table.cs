@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Mono.Data.Sqlite;
 using UnityEngine;
 using MySqlConnector;
@@ -109,8 +108,7 @@ public class Table
                 break;
         }
     }
-
-
+    
     private Vector2 ParseVector2(string value)
     {
         try
@@ -146,41 +144,5 @@ public class Table
         }
 
         return Vector3.zero; // Return default instead of breaking the table
-    }
-
-    public void ClearTable(Database database)
-    {
-        using (var connection = new MySqlConnection(database.ConnectionString))
-        {
-            connection.Open();
-            using (var command = new MySqlCommand($"TRUNCATE TABLE `{Name}`;", connection))
-            {
-                command.ExecuteNonQuery();
-            }
-        }
-    }
-
-    public void InsertData(Dictionary<string, object> rowData, Database database)
-    {
-        using (var connection = new MySqlConnection(database.ConnectionString))
-        {
-            connection.Open();
-
-            string columns = string.Join(", ", rowData.Keys);
-            string parameters = string.Join(", ", rowData.Keys);
-
-            string query =
-                $"INSERT INTO `{Name}` ({columns}) VALUES ({string.Join(", ", rowData.Keys.Select(k => "@" + k))});";
-
-            using (var command = new MySqlCommand(query, connection))
-            {
-                foreach (var pair in rowData)
-                {
-                    command.Parameters.AddWithValue("@" + pair.Key, pair.Value);
-                }
-
-                command.ExecuteNonQuery();
-            }
-        }
     }
 }

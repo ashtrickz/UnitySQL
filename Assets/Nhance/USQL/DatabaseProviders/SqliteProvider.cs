@@ -50,6 +50,14 @@ namespace Nhance.USQL.DatabaseProviders
             cmd.ExecuteNonQuery();
         }
 
+        public void ClearTable(string tableName)
+        {
+            using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
+            conn.Open();
+            using var command = new SqliteCommand($"TRUNCATE TABLE `{tableName}`;", conn);
+            command.ExecuteNonQuery();
+        }
+        
         public void DeleteTable(string tableName)
         {
             using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
@@ -60,20 +68,14 @@ namespace Nhance.USQL.DatabaseProviders
 
         public void LoadTables(List<Table> tables)
         {
-            // tables.Clear();
+            using var connection = new SqliteConnection($"Data Source={_connectionString};Version=3;");
+            connection.Open();
 
-            using (var connection = new SqliteConnection($"Data Source={_connectionString};Version=3;"))
+            using var command = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table';", connection);
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
             {
-                connection.Open();
-
-                using (var command = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table';", connection))
-                using (var reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        tables.Add(new Table(reader.GetString(0)));
-                    }
-                }
+                tables.Add(new Table(reader.GetString(0)));
             }
         }
         

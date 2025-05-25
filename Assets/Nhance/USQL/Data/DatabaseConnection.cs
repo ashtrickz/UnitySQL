@@ -45,7 +45,6 @@ public class DatabaseConnection
         }
         else // SQLite
         {
-            // Для SQLite создаём один "виртуальный" Database, так как база — это файл
             Databases.Add(new Database("SQLite_DB", Path, EConnectionType.SQLite));
         }
     }
