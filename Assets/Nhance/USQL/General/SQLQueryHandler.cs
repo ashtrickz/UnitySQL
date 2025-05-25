@@ -4,6 +4,7 @@ using System.Data;
 using Mono.Data.Sqlite;
 using UnityEngine;
 using MySqlConnector;
+using Nhance.USQL.Data;
 
 public static class SQLQueryHandler
 {

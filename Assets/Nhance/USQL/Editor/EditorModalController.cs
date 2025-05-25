@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Nhance.USQL.Data;
 using UnityEditor;
 using UnityEngine;
 
@@ -67,7 +68,7 @@ namespace Nhance.USQL.Editor
             if (GUILayout.Button("Add", GUILayout.Height(25)))
             {
                 if (!string.IsNullOrEmpty(_columnName))
-                    _db.AddColumn_Maria(_table, _columnName, _types[_typeIndex]);
+                    _db.AddColumn(_table, _columnName, _types[_typeIndex]);
                 CloseWindow();
             }
         }
@@ -98,7 +99,7 @@ namespace Nhance.USQL.Editor
             GUILayout.Space(10);
             if (GUILayout.Button("Duplicate", GUILayout.Height(25)))
             {
-                _db.InsertRow_Maria(_table, _row);
+                _db.InsertRow(_table, _row);
                 CloseWindow();
             }
         }
@@ -121,10 +122,8 @@ namespace Nhance.USQL.Editor
         {
             _db = db;
             _table = table;
-            
-            _cols = db.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? db.GetColumnNames_Maria(table)
-                : db.GetColumnNames_Lite(table);
+
+            _cols = db.GetColumnNames(table);
             
             foreach (var col in _cols) _values[col] = string.Empty;
         }
@@ -142,7 +141,7 @@ namespace Nhance.USQL.Editor
             {
                 var row = new Dictionary<string, object>();
                 foreach (var col in _cols) row[col] = _values[col];
-                _db.InsertRow_Maria(_table, row);
+                _db.InsertRow(_table, row);
                 CloseWindow();
             }
         }
@@ -183,7 +182,7 @@ namespace Nhance.USQL.Editor
             GUILayout.Space(10);
             if (GUILayout.Button("Save", GUILayout.Height(25)))
             {
-                _db.ModifyColumn_Maria(_table, /* index= */ 0, _newName, _types[_newTypeIndex], _isPk);
+                _db.ModifyColumn(_table, /* index= */ 0, _newName, _types[_newTypeIndex], _isPk);
                 CloseWindow();
             }
         }
@@ -219,7 +218,7 @@ namespace Nhance.USQL.Editor
             GUILayout.Space(10);
             if (GUILayout.Button("Update", GUILayout.Height(25)))
             {
-                _db.UpdateCellValue_Maria(_table, _row, _col, _newVal);
+                _db.UpdateCellValue(_table, _row, _col, _newVal);
                 CloseWindow();
             }
         }
@@ -371,7 +370,7 @@ namespace Nhance.USQL.Editor
             {
                 if (!string.IsNullOrEmpty(_tableName) && _columns.Count > 0)
                 {
-                    _database.CreateTable_Maria(_tableName, _columns, _primaryKeyIndex);
+                    _database.CreateTable(_tableName, _columns, _primaryKeyIndex);
                     CloseWindow();
                 }
                 else
@@ -415,7 +414,7 @@ namespace Nhance.USQL.Editor
             GUILayout.Space(10);
             if (GUILayout.Button("Delete", GUILayout.Height(25)))
             {
-                _db.DeleteColumn_Maria(_table, _col);
+                _db.DeleteColumn(_table, _col);
                 CloseWindow();
             }
         }
@@ -499,7 +498,7 @@ namespace Nhance.USQL.Editor
         {
             if (database != null && rowData != null)
             {
-                database.DeleteRowFromTable_Maria(tableName, rowData);
+                database.DeleteRowFromTable(tableName, rowData);
                 Debug.Log($"[SUCCESS] Deleted row from {tableName}");
 
                 database.LoadTableContent(tableName);

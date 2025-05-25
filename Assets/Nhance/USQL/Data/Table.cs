@@ -4,6 +4,7 @@ using System.Linq;
 using Mono.Data.Sqlite;
 using UnityEngine;
 using MySqlConnector;
+using Nhance.USQL.Data;
 using UnityEditor;
 
 public class Table
@@ -40,7 +41,7 @@ public class Table
 
                                 if (value is DBNull) value = null;
 
-                                string columnType = database.GetColumnType_Lite(Name, columnName);
+                                string columnType = database.GetColumnType(Name, columnName);
 
                                 try
                                 {

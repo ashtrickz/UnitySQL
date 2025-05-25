@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using MySqlConnector;
+using Nhance.USQL.Data;
 using UnityEngine;
 
 public class DatabaseConnection

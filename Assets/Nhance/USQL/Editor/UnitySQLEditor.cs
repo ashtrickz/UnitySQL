@@ -5,6 +5,7 @@ using System.Linq;
 using Mono.Data.Sqlite;
 using MySqlConnector;
 using Nhance.USQL.AI;
+using Nhance.USQL.Data;
 using Unity.Plastic.Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
@@ -48,7 +49,7 @@ namespace Nhance.USQL.Editor
         private int selectedDatabaseIndex = -1;
         private int selectedTab = 0;
         private int currentPage = 0;
-        private int selectedTableIndex = 0;
+        // private int selectedTableIndex = 0;
         private int selectedAIProviderIndex = 0;
 
         private string searchQuery = "";
@@ -326,7 +327,7 @@ namespace Nhance.USQL.Editor
                 {
                     GenericModalWindow.Show(new ConfirmationContent(
                         $"Are you sure you want to delete table '{table.Name}'?",
-                        () => database.DeleteTable_Maria(table.Name)));
+                        () => database.DeleteTable(table.Name)));
                 }
             }
 
@@ -541,9 +542,7 @@ namespace Nhance.USQL.Editor
             var table = database.Tables.FirstOrDefault(t => t.Name == selectedTableForContent);
             if (table == null) return;
 
-            var primaryKeyColumn = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetPrimaryKeyColumn_Maria(selectedTableForContent)
-                : database.GetPrimaryKeyColumn_Lite(selectedTableForContent);
+            var primaryKeyColumn = database.GetPrimaryKeyColumn(selectedTableForContent);
             var totalRows = table.Data.Count;
             var totalPages = Mathf.CeilToInt((float) totalRows / RowsPerPage);
             currentPage = Mathf.Clamp(currentPage, 0, Mathf.Max(0, totalPages - 1));
@@ -601,9 +600,7 @@ namespace Nhance.USQL.Editor
                         }
 
                         // **Fetch Column Type from Database**
-                        var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                            ? database.GetColumnType_Maria(selectedTableForContent, column)
-                            : database.GetColumnType_Lite(selectedTableForContent, column);
+                        var columnType = database.GetColumnType(selectedTableForContent, column);
 
                         switch (columnType)
                         {
@@ -838,7 +835,7 @@ namespace Nhance.USQL.Editor
                 GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, tableName, columnName)));
             menu.AddItem(new GUIContent("Make Primary Key"), false, () =>
             {
-                database.MakePrimaryKey_Maria(tableName, columnName);
+                database.MakePrimaryKeyColumn(tableName, columnName);
                 database.LoadTableContent(tableName);
             });
             menu.ShowAsContext();
@@ -866,10 +863,7 @@ namespace Nhance.USQL.Editor
 
             if (database == null) return;
 
-            var columnType = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetColumnType_Maria(tableName, columnName)
-                : database.GetColumnType_Lite(tableName, columnName);
-
+            var columnType = database.GetColumnType(tableName, columnName);
             try
             {
                 var convertedValue = "";
@@ -892,7 +886,7 @@ namespace Nhance.USQL.Editor
                     rowData[columnName] = newValue;
                 }
 
-                database.UpdateCellValue_Maria(tableName, rowData, columnName, convertedValue);
+                database.UpdateCellValue(tableName, rowData, columnName, convertedValue);
                 database.LoadTableContent(tableName);
             }
             catch (Exception e)
@@ -942,7 +936,7 @@ namespace Nhance.USQL.Editor
                 case "Delete":
                     GenericModalWindow.Show(new ConfirmationContent(
                         $"Are you sure you want to delete table '{tableName}'?",
-                        () => database.DeleteTable_Maria(tableName)));
+                        () => database.DeleteTable(tableName)));
                     break;
             }
         }
@@ -962,9 +956,7 @@ namespace Nhance.USQL.Editor
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            List<Database.TableColumn> columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetTableColumns_Maria(selectedTableForContent)
-                : database.GetTableColumns_Lite(selectedTableForContent);
+            List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
 
             if (columns == null || columns.Count == 0)
             {
@@ -1107,7 +1099,7 @@ namespace Nhance.USQL.Editor
                         new DeleteColumnConfirmationContent(database, selectedTableForContent, columnName));
                     break;
                 case "PrimaryKey":
-                    database.MakePrimaryKey_Maria(selectedTableForContent, columnName);
+                    database.MakePrimaryKeyColumn(selectedTableForContent, columnName);
                     break;
             }
         }
@@ -1132,7 +1124,7 @@ namespace Nhance.USQL.Editor
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            List<Database.TableColumn> columns = database.GetTableColumns_Maria(selectedTableForContent);
+            List<Database.TableColumn> columns = database.GetTableColumns(selectedTableForContent);
             List<string> selectedColumns = new List<string>();
 
             for (int i = 0; i < columns.Count; i++)
@@ -1159,7 +1151,7 @@ namespace Nhance.USQL.Editor
                     {
                         foreach (string columnName in selectedColumns)
                         {
-                            database.DeleteColumn_Maria(selectedTableForContent, columnName);
+                            database.DeleteColumn(selectedTableForContent, columnName);
                         }
 
                         database.LoadTableContent(selectedTableForContent);
@@ -1179,7 +1171,7 @@ namespace Nhance.USQL.Editor
                 var newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
                 var isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
 
-                database.ModifyColumn_Maria(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+                database.ModifyColumn(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
             }
 
             database.LoadTableContent(selectedTableForContent);
@@ -1200,9 +1192,7 @@ namespace Nhance.USQL.Editor
             var connection = connections[selectedConnectionIndex];
             var database = connection.Databases[selectedDatabaseIndex];
 
-            var columns = database.ConnectionType == DatabaseConnection.EConnectionType.MySQL
-                ? database.GetTableColumns_Maria(selectedTableForContent)
-                : database.GetTableColumns_Lite(selectedTableForContent);
+            var columns = database.GetTableColumns(selectedTableForContent);
 
             if (columns == null || columns.Count == 0)
             {

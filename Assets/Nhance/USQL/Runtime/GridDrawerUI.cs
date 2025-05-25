@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Nhance.USQL.Data;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
@@ -60,7 +61,7 @@ public class GridDrawerUI : MonoBehaviour
         var columnCount = data.Item1.Length;
         var rowCount = data.Item2.Count;
 
-        var primaryKey = database.GetPrimaryKeyColumn_Maria(table.Name);
+        var primaryKey = database.GetPrimaryKeyColumn(table.Name);
         
         int primaryKeyIndex = -1;
         
