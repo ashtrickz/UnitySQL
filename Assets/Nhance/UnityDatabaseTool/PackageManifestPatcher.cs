@@ -11,7 +11,7 @@ static class PackageManifestPatcher
 {
     private static readonly string[]   UpmPackages = {
         "com.unity.nuget.newtonsoft-json@3.0.2",
-        "com.unity.editorcoroutines@1.2.1"
+        "com.unity.editorcoroutines@1.0"
     };
     
     private const string EmbeddedPackagePath = "Assets/Nhance/UnityDatabaseTool/Core.unitypackage";
