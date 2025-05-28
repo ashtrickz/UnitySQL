@@ -35,7 +35,7 @@ namespace Nhance.UnityDatabaseTool.AiProviders
 
             var payload = new
             {
-                model = "nemotron", // или любой другой alias
+                model = "nemotron",
                 messages,
                 temperature = 0.5
             };

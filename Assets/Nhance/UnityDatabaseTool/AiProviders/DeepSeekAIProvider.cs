@@ -35,7 +35,7 @@ namespace Nhance.UnityDatabaseTool.AiProviders
 
             var payload = new
             {
-                model = "deepseek-chat", // можно заменить на другую, если DeepSeek добавит новые
+                model = "deepseek-chat",
                 messages,
                 temperature = 0.5
             };
