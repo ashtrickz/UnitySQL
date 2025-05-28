@@ -131,6 +131,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         public static void ShowWindow()
         {
             var window = GetWindow<UnitySqlManager>("Nhance Unity Database Tool");
+            window.minSize = new Vector2(1280, 720);
             window.LoadSessionData();
         }
 
