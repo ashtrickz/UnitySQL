@@ -1720,7 +1720,7 @@ namespace Nhance.UnityDatabaseTool.Editor
             if (saveData?.Connections != null)
             {
                 foreach (var connection in saveData.Connections.Select(path => new DatabaseConnection(path,
-                    path.Contains("SSL")
+                    path.Contains("Ssl")
                         ? DatabaseConnection.EConnectionType.MySQL
                         : DatabaseConnection.EConnectionType.SQLite)))
                 {
