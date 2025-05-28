@@ -237,7 +237,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                 if (GUILayout.Button("↻", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(20)))
                     connection.Databases[0].RefreshConnection();
-                
+
                 EditorGUILayout.EndHorizontal();
 
                 if (isConnectionExpanded)
@@ -1533,24 +1533,58 @@ namespace Nhance.UnityDatabaseTool.Editor
             {
                 tableData.Clear(); // Clear previous results
 
-                using (var connection = new MySqlConnection(database.ConnectionString))
+                switch (database.ConnectionType)
                 {
-                    connection.Open();
-                    using (var dbCommand = connection.CreateCommand())
-                    {
-                        dbCommand.CommandText = database.SQLQuery;
+                    case DatabaseConnection.EConnectionType.MySQL:
+                        using (var connection = new MySqlConnection(database.ConnectionString))
+                        {
+                            connection.Open();
+                            using (var dbCommand = connection.CreateCommand())
+                            {
+                                dbCommand.CommandText = database.SQLQuery;
 
-                        if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
-                        {
-                            ReadTableResults(dbCommand);
+                                if (database.SQLQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    ReadTableResults(dbCommand);
+                                }
+                                else
+                                {
+                                    var affectedRows = dbCommand.ExecuteNonQuery();
+                                    sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
+                                }
+                            }
                         }
-                        else
+
+                        break;
+                    case DatabaseConnection.EConnectionType.SQLite:
+                        using (var connection =
+                            new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
                         {
-                            var affectedRows = dbCommand.ExecuteNonQuery();
-                            sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
+                            connection.Open();
+
+                            // Создаём команду
+                            using (var dbCommand = connection.CreateCommand())
+                            {
+                                dbCommand.CommandText = database.SQLQuery;
+
+                                // Если это SELECT — читаем табличные результаты
+                                if (database.SQLQuery.TrimStart()
+                                    .StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    ReadTableResults(dbCommand);
+                                }
+                                else
+                                {
+                                    // Иначе — просто выполняем и получаем число затронутых строк
+                                    var affectedRows = dbCommand.ExecuteNonQuery();
+                                    sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
+                                }
+                            }
                         }
-                    }
+
+                        break;
                 }
+
 
                 DrawConnectionsPanel();
             }
