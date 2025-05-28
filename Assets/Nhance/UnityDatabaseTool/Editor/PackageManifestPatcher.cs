@@ -14,7 +14,7 @@ static class PackageManifestPatcher
         "com.unity.editorcoroutines@1.2.1"
     };
     
-    private const string EmbeddedPackagePath = "Assets/Nhance/UnityDatabaseTool/AiExtension.unitypackage";
+    private const string EmbeddedPackagePath = "Assets/Nhance/UnityDatabaseTool/Core.unitypackage";
 
     private static ListRequest       listRequest;
     private static AddRequest        addRequest;
@@ -82,22 +82,22 @@ static class PackageManifestPatcher
         {
             if (File.Exists(EmbeddedPackagePath))
             {
-                Debug.Log($"[Patcher] Installing extension: {EmbeddedPackagePath}");
+                Debug.Log($"[Patcher] Installing Core: {EmbeddedPackagePath}");
                 AssetDatabase.ImportPackage(EmbeddedPackagePath, false);
                 
                 try
                 {
                     File.Delete(EmbeddedPackagePath);
-                    Debug.Log($"[Patcher] Deleted extension package file: {EmbeddedPackagePath}");
+                    Debug.Log($"[Patcher] Deleted Core package file: {EmbeddedPackagePath}");
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogWarning($"[Patcher] Failed to delete extension package: {e.Message}");
+                    Debug.LogWarning($"[Patcher] Failed to delete Core package: {e.Message}");
                 }
             }
             else
             {
-                Debug.Log($"[Patcher] AI Extension doesn't found.");
+                Debug.Log($"[Patcher] Core Package doesn't found.");
             }
 
             hasImportedEmbedded = true;
