@@ -15,6 +15,9 @@ static class PackageManifestPatcher
     };
     
     private const string EmbeddedPackagePath = "Assets/Nhance/UnityDatabaseTool/Core.unitypackage";
+    
+    private const string SourceFolder = "Assets/Nhance/UnityDatabaseTool/";
+    private const string DestFolder   = "Assets/Plugins/";
 
     private static ListRequest       listRequest;
     private static AddRequest        addRequest;
@@ -94,6 +97,31 @@ static class PackageManifestPatcher
                 {
                     Debug.LogWarning($"[Patcher] Failed to delete Core package: {e.Message}");
                 }
+                
+                try
+                {
+                    Directory.CreateDirectory(DestFolder);
+                    var files = new[] { "sqlite3.def", "sqlite3.dll" };
+                    foreach (var fileName in files)
+                    {
+                        var src = Path.Combine(SourceFolder, fileName).Replace("\\", "/");
+                        var dst = Path.Combine(DestFolder, fileName).Replace("\\", "/");
+                        if (AssetDatabase.MoveAsset(src, dst) == "")
+                            Debug.Log($"[Patcher] {fileName} moved to {DestFolder}");
+                        else
+                            Debug.LogWarning($"[Patcher] Failed to move {fileName} (might be missed).");
+                    }
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[Patcher] Error moving plugin files: {e.Message}");
+                }
+                
+                Debug.Log($"[Patcher] Initializing restart...");
+                
+                var projectPath = System.IO.Path.GetDirectoryName(Application.dataPath);
+                EditorApplication.OpenProject(projectPath);
+                
             }
             else
             {
@@ -102,8 +130,8 @@ static class PackageManifestPatcher
 
             hasImportedEmbedded = true;
         }
-        
-        if (hasImportedEmbedded)
-            EditorApplication.update -= OnEditorUpdate;
+
+        if (!hasImportedEmbedded) return;
+        EditorApplication.update -= OnEditorUpdate;
     }
 }
