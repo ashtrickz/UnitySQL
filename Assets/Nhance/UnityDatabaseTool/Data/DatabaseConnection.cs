@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using MySqlConnector;
 using UnityEngine;
+using Nhance.UnityDatabaseTool;
+using UnityEditor;
 
 namespace Nhance.UnityDatabaseTool.Data
 {
@@ -13,7 +15,6 @@ namespace Nhance.UnityDatabaseTool.Data
 
         public EConnectionType ConnectionType;
 
-    
         public DatabaseConnection(string connectionString, EConnectionType type)
         {
             Path = connectionString;

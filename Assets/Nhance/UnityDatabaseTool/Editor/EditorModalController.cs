@@ -49,12 +49,16 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private string _columnName = string.Empty;
         private int _typeIndex;
-
+        
+        private UnityDatabaseEditor _editor;
+        
+        
         private static readonly string[] _types =
             {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
 
-        public AddColumnContent(Database db, string table)
+        public AddColumnContent(UnityDatabaseEditor editor, Database db, string table)
         {
+            _editor = editor;
             _db = db;
             _table = table;
         }
@@ -79,7 +83,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -89,9 +93,11 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly Database _db;
         private readonly string _table;
         private readonly Dictionary<string, object> _row;
-
-        public DuplicateRowContent(Database db, string table, Dictionary<string, object> row)
+        private UnityDatabaseEditor _editor;
+        
+        public DuplicateRowContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row)
         {
+            _editor = editor;
             _db = db;
             _table = table;
             _row = row;
@@ -114,7 +120,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -125,9 +131,10 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private readonly List<string> _cols;
         private readonly Dictionary<string, string> _values = new Dictionary<string, string>();
-
-        public AddRowContent(Database db, string table)
+        private UnityDatabaseEditor _editor;
+        public AddRowContent(UnityDatabaseEditor editor, Database db, string table)
         {
+            _editor = editor;
             _db = db;
             _table = table;
 
@@ -160,7 +167,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -173,12 +180,15 @@ namespace Nhance.UnityDatabaseTool.Editor
         private string _newName;
         private int _newTypeIndex;
         private bool _isPk;
-
+        private UnityDatabaseEditor _editor;
+        
+        
         private static readonly string[] _types =
             {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
-
-        public ChangeColumnContent(Database db, string table, string column)
+        
+        public ChangeColumnContent(UnityDatabaseEditor editor, Database db, string table, string column)
         {
+            _editor = editor;        
             _db = db;
             _table = table;
             _oldName = column;
@@ -205,7 +215,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -217,9 +227,10 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _col;
         private readonly Dictionary<string, object> _row;
         private string _newVal;
-
-        public ChangeValueContent(Database db, string table, Dictionary<string, object> row, string column)
+        private UnityDatabaseEditor _editor;
+        public ChangeValueContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row, string column)
         {
+            _editor = editor;
             _db = db;
             _table = table;
             _row = row;
@@ -245,7 +256,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -281,11 +292,11 @@ namespace Nhance.UnityDatabaseTool.Editor
     
     public class CreateDatabaseContent : IModalContent
     {
-        private readonly UnitySqlManager _manager;
+        private readonly UnityDatabaseEditor _manager;
         private readonly DatabaseConnection _connection;
         private string _dbName;
 
-        public CreateDatabaseContent(UnitySqlManager manager, DatabaseConnection connection)
+        public CreateDatabaseContent(UnityDatabaseEditor manager, DatabaseConnection connection)
         {
             _manager = manager;
             _connection = connection;
@@ -420,9 +431,10 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly Database _db;
         private readonly string _table;
         private readonly string _col;
-
-        public DeleteColumnConfirmationContent(Database db, string table, string col)
+        private UnityDatabaseEditor _editor;
+        public DeleteColumnConfirmationContent(UnityDatabaseEditor editor, Database db, string table, string col)
         {
+            _editor = editor;
             _db = db;
             _table = table;
             _col = col;
@@ -445,7 +457,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }
@@ -455,9 +467,11 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly Database _db;
         private readonly string _table;
         private readonly Dictionary<string, object> _row;
-
-        public DeleteRowConfirmationContent(Database db, string table, Dictionary<string, object> row)
+        private UnityDatabaseEditor _editor;
+        
+        public DeleteRowConfirmationContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row)
         {
+            _editor = editor;
             _db = db;
             _table = table;
             _row = row;
@@ -480,7 +494,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow()
         {
-            _db.RefreshTable();
+            _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
     }

@@ -4,16 +4,17 @@ using System.Data;
 using System.Linq;
 using Mono.Data.Sqlite;
 using MySqlConnector;
+using Newtonsoft.Json;
 using Nhance.UnityDatabaseTool.AiProviders;
 using Nhance.UnityDatabaseTool.Data;
-using Newtonsoft.Json;
 using UnityEditor;
 using UnityEngine;
 
 namespace Nhance.UnityDatabaseTool.Editor
 {
-    public class UnitySqlManager : EditorWindow
+    public class UnityDatabaseEditor : EditorWindow
     {
+
         #region Enums
 
         private enum EConnectionType
@@ -31,7 +32,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         #endregion
 
         #region Fields
-
+        
         private EConnectionType selectedConnectionType = EConnectionType.Local;
         private ESqlMode currentMode = ESqlMode.Manual;
 
@@ -106,6 +107,8 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private IAIProvider aiProvider;
 
+        public string SelectedTableName => selectedTableForContent;
+        
         #endregion
 
         private void OnEnable()
@@ -130,7 +133,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         [MenuItem("Nhance/Tools/Unity Database Tool")]
         public static void ShowWindow()
         {
-            var window = GetWindow<UnitySqlManager>("Nhance Unity Database Tool");
+            var window = GetWindow<UnityDatabaseEditor>("Nhance Unity Database Tool");
             window.minSize = new Vector2(1280, 720);
             window.LoadSessionData();
         }
@@ -506,7 +509,7 @@ namespace Nhance.UnityDatabaseTool.Editor
                     if (!string.IsNullOrEmpty(localDatabasePath))
                     {
                         connections.Add(
-                            new DatabaseConnection(localDatabasePath, DatabaseConnection.EConnectionType.SQLite));
+                            new DatabaseConnection(/*this, */localDatabasePath, DatabaseConnection.EConnectionType.SQLite));
                         SaveSessionData();
                     }
                 }
@@ -576,7 +579,7 @@ namespace Nhance.UnityDatabaseTool.Editor
                 }
 
                 if (GUILayout.Button("➕", EditorStyles.boldLabel, GUILayout.Width(25), GUILayout.Height(25)))
-                    GenericModalWindow.Show(new AddColumnContent(database, selectedTableForContent));
+                    GenericModalWindow.Show(new AddColumnContent(this, database, selectedTableForContent));
                 EditorGUILayout.EndHorizontal();
 
                 // **Table Rows**
@@ -658,13 +661,13 @@ namespace Nhance.UnityDatabaseTool.Editor
                 };
 
                 if (GUILayout.Button("Add Row", style, GUILayout.Width(125), GUILayout.Height(25)))
-                    GenericModalWindow.Show(new AddRowContent(database, selectedTableForContent));
+                    GenericModalWindow.Show(new AddRowContent(this, database, selectedTableForContent));
             }
             else
             {
                 EditorGUILayout.LabelField("No Data Found.", EditorStyles.boldLabel);
                 if (GUILayout.Button("Add First Row", GUILayout.Height(25)))
-                    GenericModalWindow.Show(new AddRowContent(database, selectedTableForContent));
+                    GenericModalWindow.Show(new AddRowContent(this, database, selectedTableForContent));
             }
 
             EditorGUILayout.BeginHorizontal();
@@ -809,9 +812,9 @@ namespace Nhance.UnityDatabaseTool.Editor
 
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Duplicate Row"), false, () =>
-                GenericModalWindow.Show(new DuplicateRowContent(database, tableName, rowData)));
+                GenericModalWindow.Show(new DuplicateRowContent(this, database, tableName, rowData)));
             menu.AddItem(new GUIContent("Delete Row"), false, () =>
-                GenericModalWindow.Show(new DeleteRowConfirmationContent(database, tableName, rowData)));
+                GenericModalWindow.Show(new DeleteRowConfirmationContent(this, database, tableName, rowData)));
             menu.ShowAsContext();
         }
 
@@ -823,7 +826,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Change Value"), false, () =>
-                GenericModalWindow.Show(new ChangeValueContent(database, tableName, rowData, columnName)));
+                GenericModalWindow.Show(new ChangeValueContent(this, database, tableName, rowData, columnName)));
             menu.AddItem(new GUIContent("Copy"), false, () =>
                 EditorGUIUtility.systemCopyBuffer = cellValue);
             menu.ShowAsContext();
@@ -836,9 +839,9 @@ namespace Nhance.UnityDatabaseTool.Editor
 
             var menu = new GenericMenu();
             menu.AddItem(new GUIContent("Edit Column"), false, () =>
-                GenericModalWindow.Show(new ChangeColumnContent(database, tableName, columnName)));
+                GenericModalWindow.Show(new ChangeColumnContent(this, database, tableName, columnName)));
             menu.AddItem(new GUIContent("Delete Column"), false, () =>
-                GenericModalWindow.Show(new DeleteColumnConfirmationContent(database, tableName, columnName)));
+                GenericModalWindow.Show(new DeleteColumnConfirmationContent(this, database, tableName, columnName)));
             menu.AddItem(new GUIContent("Make Primary Key"), false, () =>
             {
                 database.MakePrimaryKeyColumn(tableName, columnName);
@@ -925,7 +928,7 @@ namespace Nhance.UnityDatabaseTool.Editor
                     break;
 
                 case "Insert":
-                    GenericModalWindow.Show(new AddRowContent(database, tableName));
+                    GenericModalWindow.Show(new AddRowContent(this, database, tableName));
                     break;
 
                 case "Clear":
@@ -1057,7 +1060,7 @@ namespace Nhance.UnityDatabaseTool.Editor
             EditorGUILayout.BeginHorizontal();
             style.normal.textColor = Color.green;
             if (GUILayout.Button("➕", style, GUILayout.Width(25), GUILayout.Height(20)))
-                GenericModalWindow.Show(new AddColumnContent(database, selectedTableForContent));
+                GenericModalWindow.Show(new AddColumnContent(this, database, selectedTableForContent));
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndScrollView();
@@ -1081,11 +1084,11 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                 case "Edit":
                     GenericModalWindow.Show(
-                        new ChangeColumnContent(database, selectedTableForContent, columnName));
+                        new ChangeColumnContent(this, database, selectedTableForContent, columnName));
                     break;
                 case "Delete":
                     GenericModalWindow.Show(
-                        new DeleteColumnConfirmationContent(database, selectedTableForContent, columnName));
+                        new DeleteColumnConfirmationContent(this, database, selectedTableForContent, columnName));
                     break;
                 case "PrimaryKey":
                     database.MakePrimaryKeyColumn(selectedTableForContent, columnName);

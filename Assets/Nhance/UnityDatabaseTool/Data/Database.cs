@@ -1,8 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Nhance.UnityDatabaseTool.DatabaseProviders;
-using Unity.VisualScripting.Dependencies.Sqlite;
 using EConnectionType = Nhance.UnityDatabaseTool.Data.DatabaseConnection.EConnectionType;
 
 namespace Nhance.UnityDatabaseTool.Data
@@ -100,9 +98,9 @@ namespace Nhance.UnityDatabaseTool.Data
             public string Type;
         }
 
-        public void RefreshTable()
+        public void RefreshTable(string selectedTableName)
         {
-            provider.RefreshTables();
+            LoadTableContent(selectedTableName);
         }
     }
 }
