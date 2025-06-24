@@ -25,9 +25,10 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 _databaseName = builder.Database;
                 _connectionString = connectionString;
             }
-            catch(Exception e)
+            catch (Exception e)
             {
-                Debug.LogError($"Could not parse database name from connection string: {connectionString}. Error: {e.Message}");
+                Debug.LogError(
+                    $"Could not parse database name from connection string: {connectionString}. Error: {e.Message}");
                 _databaseName = string.Empty;
             }
         }
@@ -51,19 +52,19 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
 
         public void OpenConnection()
         {
-            if (_connectionString != null)
+            if (_connection != null)
                 return;
 
             _connection = new MySqlConnection(_connectionString);
             _connection.Open();
-            
+
             if (_tables.Count > 0)
                 LoadTables(_tables);
         }
-        
+
         public void CloseConnection()
         {
-            if (_connectionString == null)
+            if (_connection == null)
                 return;
 
             try
@@ -81,7 +82,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 _connection = null;
             }
         }
-        
+
         public void RefreshConnection()
         {
             try
@@ -127,7 +128,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             using var command = new MySqlCommand($"TRUNCATE TABLE `{tableName}`;", connection);
             command.ExecuteNonQuery();
         }
-        
+
         public void DeleteTable(string tableName)
         {
             using var conn = new MySqlConnection(_connectionString);
@@ -135,11 +136,11 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             using var cmd = new MySqlCommand($"DROP TABLE IF EXISTS `{tableName}`;", conn);
             cmd.ExecuteNonQuery();
         }
-        
+
         public void LoadTables(List<Table> tables)
         {
             if (tables != null) _tables = tables;
-            
+
             using var connection = new MySqlConnection(_connectionString);
             connection.Open();
 
@@ -150,14 +151,14 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 _tables.Add(new Table(reader.GetString(0)));
             }
         }
-        
+
         public List<Database.TableColumn> GetTableColumns(string tableName)
         {
             var cols = new List<Database.TableColumn>();
             using var conn = new MySqlConnection(_connectionString);
             conn.Open();
             using var cmd = new MySqlCommand(@"
-            SELECT COLUMN_NAME, DATA_TYPE, COLUMN_KEY
+            SELECT COLUMN_NAME, COLUMN_TYPE, COLUMN_KEY
             FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @table
             ORDER BY ORDINAL_POSITION;", conn);
@@ -167,7 +168,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 cols.Add(new Database.TableColumn
                 {
                     Name = rdr.GetString("COLUMN_NAME"),
-                    Type = rdr.GetString("DATA_TYPE").ToUpper(),
+                    Type = rdr.GetString("COLUMN_TYPE").ToUpper(),
                     IsPrimaryKey = rdr.GetString("COLUMN_KEY") == "PRI"
                 });
             return cols;
@@ -216,9 +217,9 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             cmd.Parameters.AddWithValue("@table", tableName);
             cmd.Parameters.AddWithValue("@column", columnName);
             var type = (cmd.ExecuteScalar()?.ToString() ?? "TEXT").ToUpper();
-            
+
             // TODO: Vector2/3 inference
-            
+
             return type;
         }
 
@@ -316,7 +317,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         {
             using var conn = new MySqlConnection(_connectionString);
             conn.Open();
-            
+
             string existingPrimaryKeyColumn = null;
             using (var cmd = new MySqlCommand($"SHOW KEYS FROM `{tableName}` WHERE Key_name = 'PRIMARY'", conn))
             {
@@ -328,26 +329,28 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     }
                 }
             }
-            
+
             string commandText = $"ALTER TABLE `{tableName}` CHANGE COLUMN `{oldName}` `{newName}` {newType}";
 
             using var transaction = conn.BeginTransaction();
-            
+
             if (isPrimaryKey && oldName != existingPrimaryKeyColumn)
             {
                 if (!string.IsNullOrEmpty(existingPrimaryKeyColumn))
                 {
-                    using var dropPkCmd = new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", conn, transaction);
+                    using var dropPkCmd =
+                        new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", conn, transaction);
                     dropPkCmd.ExecuteNonQuery();
                 }
+
                 commandText += " PRIMARY KEY";
             }
-            
+
             using (var modifyCmd = new MySqlCommand(commandText + ";", conn, transaction))
             {
                 modifyCmd.ExecuteNonQuery();
             }
-    
+
             transaction.Commit();
         }
 
@@ -359,15 +362,29 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 $"ALTER TABLE `{tableName}` DROP COLUMN `{columnName}`;", conn);
             cmd.ExecuteNonQuery();
         }
-        
+
         public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
         {
         }
-
+        
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
+            try
+            {
+                var columns = GetTableColumns(tableName);
+                var columnToModify = columns.FirstOrDefault(c => c.Name.Equals(newPrimaryKey, StringComparison.OrdinalIgnoreCase));
+
+                if (columnToModify != null)
+                    ModifyColumn(tableName, newPrimaryKey, newPrimaryKey, columnToModify.Type, true);
+                else
+                    Debug.LogError($"[MySQL Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[MySQL Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
+            }
         }
-        
+
         public bool IsAutoIncrement(string tableName, string columnName)
         {
             if (string.IsNullOrEmpty(_databaseName))
@@ -381,11 +398,9 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 conn.Open();
                 using (var cmd = conn.CreateCommand())
                 {
-                    // В MySQL метаданные хранятся в системной базе данных INFORMATION_SCHEMA.
-                    // Нам нужно проверить столбец 'EXTRA' на наличие флага 'auto_increment'.
                     cmd.CommandText = "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS " +
                                       "WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = @tableName AND COLUMN_NAME = @colName";
-            
+
                     cmd.Parameters.AddWithValue("@dbName", _databaseName);
                     cmd.Parameters.AddWithValue("@tableName", tableName);
                     cmd.Parameters.AddWithValue("@colName", columnName);
@@ -398,6 +413,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     }
                 }
             }
+
             return false;
         }
     }

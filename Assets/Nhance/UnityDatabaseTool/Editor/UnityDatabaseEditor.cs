@@ -1928,11 +1928,11 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                     break;
                 case DatabaseConnection.EConnectionType.MySQL:
-                    using (var connection = new SqliteConnection(database.ConnectionString))
+                    using (var connection = new MySqlConnection(database.ConnectionString))
                     {
                         connection.Open();
                         var cmd = connection.CreateCommand();
-                        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+                        cmd.CommandText = "SHOW TABLES;";
 
                         using (var reader = cmd.ExecuteReader())
                         {
@@ -1942,6 +1942,7 @@ namespace Nhance.UnityDatabaseTool.Editor
                             }
                         }
                     }
+                    break;
 
                     break;
             }

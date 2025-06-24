@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common; // ИЗМЕНЕНИЕ: Используем общий базовый класс
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using UnityEditor;
@@ -20,98 +21,101 @@ namespace Nhance.UnityDatabaseTool.Data
         public void LoadContent(Database database)
         {
             Data.Clear();
-            switch (database.ConnectionType)
+            
+            DbConnection connection = null;
+            DbCommand command = null;
+
+            try
             {
-                case DatabaseConnection.EConnectionType.SQLite:
-                    using (var connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
+                switch (database.ConnectionType)
+                {
+                    case DatabaseConnection.EConnectionType.SQLite:
+                        connection = new SqliteConnection($"Data Source={database.ConnectionString};Version=3;");
+                        command = new SqliteCommand($"SELECT * FROM {Name};", (SqliteConnection)connection);
+                        break;
+                    case DatabaseConnection.EConnectionType.MySQL:
+                        connection = new MySqlConnection(database.ConnectionString);
+                        command = new MySqlCommand($"SELECT * FROM `{Name}`;", (MySqlConnection)connection);
+                        break;
+                }
+
+                if (connection == null) return;
+                
+                connection.Open();
+                
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
                     {
-                        connection.Open();
-
-                        using (var command = new SqliteCommand($"SELECT * FROM {Name};", connection))
-                        using (var reader = command.ExecuteReader())
+                        var row = new Dictionary<string, object>();
+                        for (int i = 0; i < reader.FieldCount; i++)
                         {
-                            while (reader.Read())
+                            string columnName = reader.GetName(i);
+                            
+                            string columnType = database.GetColumnType(Name, columnName);
+                            object value;
+                            
+                            try
                             {
-                                var row = new Dictionary<string, object>();
-
-                                for (int i = 0; i < reader.FieldCount; i++)
+                                if (columnType == "GameObject" || columnType == "Sprite" || columnType == "Vector2" || columnType == "Vector3" || columnType == "DATE" || columnType == "DATETIME")
                                 {
-                                    string columnName = reader.GetName(i);
-                                    object value = reader.GetValue(i);
-
-                                    if (value is DBNull) value = null;
-
-                                    string columnType = database.GetColumnType(Name, columnName);
-
-                                    try
-                                    {
-                                        // **Retrieve GameObject from Asset Path**
-                                        if (columnType == "GameObject" && value is string assetPath)
-                                        {
-                                            row[columnName] = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
-                                        }
-                                        // **Retrieve Sprite from Asset Path**
-                                        else if (columnType == "Sprite" && value is string spritePath)
-                                        {
-                                            row[columnName] = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
-                                        }
-                                        // **Parse Vector2**
-                                        else if (columnType == "Vector2" && value is string vector2Str)
-                                        {
-                                            row[columnName] = ParseVector2(vector2Str);
-                                        }
-                                        // **Parse Vector3**
-                                        else if (columnType == "Vector3" && value is string vector3Str)
-                                        {
-                                            row[columnName] = ParseVector3(vector3Str);
-                                        }
-                                        else
-                                        {
-                                            row[columnName] = value;
-                                        }
-                                    }
-                                    catch (Exception e)
-                                    {
-                                        Debug.LogError(
-                                            $"[ERROR] Failed to parse column '{columnName}' in table '{Name}': {e.Message}");
-                                        row[columnName] = value; // Keep raw value to prevent crashes
-                                    }
+                                    value = reader.IsDBNull(i) ? null : reader.GetString(i);
                                 }
-
-                                Data.Add(row);
-                            }
-                        }
-                    }
-
-                    break;
-                case DatabaseConnection.EConnectionType.MySQL:
-                    using (var connection = new MySqlConnection(database.ConnectionString))
-                    {
-                        connection.Open();
-                        using (var command = new MySqlCommand($"SELECT * FROM `{Name}`;", connection))
-                        using (var reader = command.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                var row = new Dictionary<string, object>();
-                                for (int i = 0; i < reader.FieldCount; i++)
+                                else
                                 {
-                                    var columnName = reader.GetName(i);
-                                    var value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                    value = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                                }
+                                
+                                if (value is DBNull)
+                                {
+                                    row[columnName] = null;
+                                }
+                                else if (columnType == "GameObject" && value is string assetPath)
+                                {
+                                    row[columnName] = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);
+                                }
+                                else if (columnType == "Sprite" && value is string spritePath)
+                                {
+                                    row[columnName] = string.IsNullOrEmpty(spritePath) ? null : AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+                                }
+                                else if (columnType == "Vector2" && value is string vector2Str)
+                                {
+                                    row[columnName] = ParseVector2(vector2Str);
+                                }
+                                else if (columnType == "Vector3" && value is string vector3Str)
+                                {
+                                    row[columnName] = ParseVector3(vector3Str);
+                                }
+                                else
+                                {
                                     row[columnName] = value;
                                 }
-
-                                Data.Add(row);
+                            }
+                            catch (Exception e)
+                            {
+                                Debug.LogError($"[ERROR] Failed to parse column '{columnName}' in table '{Name}': {e.Message}. Falling back to raw value.");
+                                row[columnName] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                             }
                         }
+                        Data.Add(row);
+    
                     }
-
-                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[FATAL ERROR] Failed to load content for table '{Name}': {ex.Message}");
+            }
+            finally
+            {
+                connection?.Close();
+                command?.Dispose();
             }
         }
     
         private Vector2 ParseVector2(string value)
         {
+            if (string.IsNullOrEmpty(value)) return Vector2.zero;
             try
             {
                 string[] parts = value.Split(',');
@@ -125,11 +129,12 @@ namespace Nhance.UnityDatabaseTool.Data
                 Debug.LogError($"[ERROR] Failed to parse Vector2: '{value}' - {e.Message}");
             }
 
-            return Vector2.zero; // Return default instead of breaking the table
+            return Vector2.zero;
         }
 
         private Vector3 ParseVector3(string value)
         {
+            if (string.IsNullOrEmpty(value)) return Vector3.zero;
             try
             {
                 string[] parts = value.Split(',');
@@ -144,7 +149,7 @@ namespace Nhance.UnityDatabaseTool.Data
                 Debug.LogError($"[ERROR] Failed to parse Vector3: '{value}' - {e.Message}");
             }
 
-            return Vector3.zero; // Return default instead of breaking the table
+            return Vector3.zero;
         }
     }
 }

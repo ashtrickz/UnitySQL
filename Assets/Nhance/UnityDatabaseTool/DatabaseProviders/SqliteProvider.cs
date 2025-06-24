@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text;
 using Mono.Data.Sqlite;
 using Nhance.UnityDatabaseTool.Data;
 using UnityEngine;
@@ -100,12 +101,12 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 $"CREATE TABLE {tableName} ({string.Join(", ", defs)});", conn);
             cmd.ExecuteNonQuery();
         }
-
+        
         public void ClearTable(string tableName)
         {
             using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
             conn.Open();
-            using var command = new SqliteCommand($"TRUNCATE TABLE `{tableName}`;", conn);
+            using var command = new SqliteCommand($"DELETE FROM {tableName};", conn);
             command.ExecuteNonQuery();
         }
 
@@ -193,13 +194,16 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     try
                     {
                         using var sampleCmd =
-                            new SqliteCommand($"SELECT {columnName} FROM {tableName} LIMIT 1;", conn);
+                            new SqliteCommand($"SELECT {columnName} FROM {tableName} WHERE {columnName} IS NOT NULL LIMIT 1;", conn);
                         using var sr = sampleCmd.ExecuteReader();
-                        if (sr.Read() && sr[0] is string s && s.Contains(","))
+                        if (sr.Read() && !sr.IsDBNull(0) && sr[0] is string s && s.Contains(","))
                         {
                             var parts = s.Split(',');
-                            if (parts.Length == 2) return "Vector2";
-                            if (parts.Length == 3) return "Vector3";
+                            if (float.TryParse(parts[0], out _) && float.TryParse(parts[1], out _))
+                            {
+                                if (parts.Length == 2) return "Vector2";
+                                if (parts.Length == 3 && float.TryParse(parts[2], out _)) return "Vector3";
+                            }
                         }
                     }
                     catch
@@ -351,9 +355,15 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             }
             
             createTableBuilder.Append(string.Join(", ", newColumnDefinitions));
+            
             if (!string.IsNullOrEmpty(newPrimaryKey))
             {
-                createTableBuilder.Append($", PRIMARY KEY('{newPrimaryKey}' AUTOINCREMENT)");
+                createTableBuilder.Append($", PRIMARY KEY('{newPrimaryKey}'");
+                if(newType.ToUpper() == "INTEGER")
+                {
+                    createTableBuilder.Append(" AUTOINCREMENT");
+                }
+                createTableBuilder.Append(")");
             }
 
             createTableBuilder.Append(");");
@@ -393,9 +403,68 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         {
             using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
             conn.Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"ALTER TABLE {tableName} DROP COLUMN {columnName};";
-            cmd.ExecuteNonQuery();
+            using var transaction = conn.BeginTransaction();
+            
+            try
+            {
+                var columns = GetTableColumns(tableName);
+                var remainingColumns = columns.Where(c => !c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (remainingColumns.Count == columns.Count)
+                {
+                    Debug.LogWarning($"[SQLite Provider] Column '{columnName}' not found in table '{tableName}'.");
+                    return;
+                }
+                
+                string pkName = remainingColumns.FirstOrDefault(c => c.IsPrimaryKey)?.Name;
+
+                var tempTableName = $"{tableName}_temp";
+                var createTableBuilder = new StringBuilder($"CREATE TABLE {tempTableName} (");
+                var newColumnDefinitions = remainingColumns.Select(col => $"'{col.Name}' {col.Type}").ToList();
+                createTableBuilder.Append(string.Join(", ", newColumnDefinitions));
+                
+                if (!string.IsNullOrEmpty(pkName))
+                {
+                     createTableBuilder.Append($", PRIMARY KEY('{pkName}')");
+                }
+                createTableBuilder.Append(");");
+
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = createTableBuilder.ToString();
+                    cmd.ExecuteNonQuery();
+                }
+                
+                var insertColumnNames = string.Join(", ", remainingColumns.Select(c => $"'{c.Name}'"));
+
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"INSERT INTO {tempTableName} ({insertColumnNames}) SELECT {insertColumnNames} FROM {tableName};";
+                    cmd.ExecuteNonQuery();
+                }
+
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"DROP TABLE {tableName};";
+                    cmd.ExecuteNonQuery();
+                }
+                
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = transaction;
+                    cmd.CommandText = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+                    cmd.ExecuteNonQuery();
+                }
+
+                transaction.Commit();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SQLite Provider] Failed to delete column '{columnName}' from table '{tableName}'. Error: {e.Message}");
+                transaction.Rollback();
+            }
         }
 
         public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
@@ -404,6 +473,20 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
 
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
+            try
+            {
+                var columnToModify = GetTableColumns(tableName)
+                    .FirstOrDefault(c => c.Name.Equals(newPrimaryKey, StringComparison.OrdinalIgnoreCase));
+
+                if (columnToModify != null)
+                    ModifyColumn(tableName, newPrimaryKey, newPrimaryKey, columnToModify.Type, true);
+                else
+                    Debug.LogError($"[SQLite Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SQLite Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
+            }
         }
 
         public bool IsAutoIncrement(string tableName, string columnName)
