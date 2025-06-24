@@ -33,5 +33,6 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType);
         void MakePrimaryKey(string tableName, string newPrimaryKey);
         void ClearTable(string tableName);
+        bool IsAutoIncrement(string tableName, string columnName);
     }
 }

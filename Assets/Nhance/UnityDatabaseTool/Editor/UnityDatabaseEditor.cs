@@ -1057,35 +1057,27 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                 columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
                 editedColumnNames[i] = EditorGUILayout.TextField(editedColumnNames[i], GUILayout.Width(150));
-
-                // --- MODIFIED TYPE EDITOR ---
-                // Find index of the current base type in our available types array
+                
                 int selectedBaseTypeIndex = Array.IndexOf(availableColumnTypes, editedColumnBaseTypes[i]);
-                if (selectedBaseTypeIndex < 0) selectedBaseTypeIndex = 0; // Default to TEXT if not found
-
-                // Draw Popup for base type
+                if (selectedBaseTypeIndex < 0) selectedBaseTypeIndex = 0;
+                
                 int newSelectedBaseTypeIndex = EditorGUILayout.Popup(selectedBaseTypeIndex, availableColumnTypes, GUILayout.Width(80));
                 if (newSelectedBaseTypeIndex != selectedBaseTypeIndex)
                 {
                     editedColumnBaseTypes[i] = availableColumnTypes[newSelectedBaseTypeIndex];
-                    // Clear parameters when type changes
                     editedColumnParameters[i] = "";
                 }
                 
-                // Draw text field for parameters (e.g., (100) for VARCHAR)
-                // Only for types that support it
                 if (editedColumnBaseTypes[i] == "VARCHAR" || editedColumnBaseTypes[i] == "DECIMAL")
                 {
                     editedColumnParameters[i] = EditorGUILayout.TextField(editedColumnParameters[i], GUILayout.Width(68));
                 }
                 else
                 {
-                    // For other types, show a disabled field to maintain alignment
                     EditorGUI.BeginDisabledGroup(true);
                     EditorGUILayout.TextField("", GUILayout.Width(68));
                     EditorGUI.EndDisabledGroup();
                 }
-                // --- END OF MODIFIED TYPE EDITOR ---
 
                 bool wasPrimaryKey = editedPrimaryKeys[i];
                 editedPrimaryKeys[i] = EditorGUILayout.Toggle(editedPrimaryKeys[i], GUILayout.Width(100));
@@ -1207,7 +1199,6 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void SaveColumnChanges(Database database)
         {
-            // Get original columns to compare against
             List<Database.TableColumn> originalColumns = database.GetTableColumns(selectedTableForContent);
 
             for (var i = 0; i < editedColumnNames.Count; i++)
@@ -1215,22 +1206,18 @@ namespace Nhance.UnityDatabaseTool.Editor
                 var originalColumn = originalColumns[i];
                 var newColumnName = editedColumnNames[i];
                 
-                // Reconstruct the full column type from the base type and parameters
                 var newColumnType = editedColumnBaseTypes[i] + editedColumnParameters[i].Trim();
                 
                 var isPrimaryKey = editedPrimaryKeys[i];
-
-                // Check if anything has actually changed for this column
+                
                 if (originalColumn.Name != newColumnName || originalColumn.Type != newColumnType || originalColumn.IsPrimaryKey != isPrimaryKey)
                 {
                      database.ModifyColumn(selectedTableForContent, originalColumn.Name, newColumnName, newColumnType, isPrimaryKey);
                 }
             }
-
-            // Force a reload of the structure and data from the database
+            
             database.LoadTableContent(selectedTableForContent);
             
-            // Invalidate the edited lists so they are rebuilt on the next DrawStructure call
             editedColumnNames.Clear();
         }
 
@@ -1601,7 +1588,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         {
             try
             {
-                tableData.Clear(); // Clear previous results
+                tableData.Clear();
 
                 switch (database.ConnectionType)
                 {
@@ -1631,13 +1618,11 @@ namespace Nhance.UnityDatabaseTool.Editor
                             new SqliteConnection($"Data Source={database.ConnectionString};Version=3;"))
                         {
                             connection.Open();
-
-                            // Создаём команду
+                            
                             using (var dbCommand = connection.CreateCommand())
                             {
                                 dbCommand.CommandText = database.SQLQuery;
-
-                                // Если это SELECT — читаем табличные результаты
+                                
                                 if (database.SQLQuery.TrimStart()
                                     .StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
                                 {
@@ -1645,7 +1630,6 @@ namespace Nhance.UnityDatabaseTool.Editor
                                 }
                                 else
                                 {
-                                    // Иначе — просто выполняем и получаем число затронутых строк
                                     var affectedRows = dbCommand.ExecuteNonQuery();
                                     sqlExecutionMessage = $"Query executed successfully. Affected rows: {affectedRows}";
                                 }

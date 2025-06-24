@@ -102,5 +102,8 @@ namespace Nhance.UnityDatabaseTool.Data
         {
             LoadTableContent(selectedTableName);
         }
+
+        public bool IsAutoIncrement(string tableName, string colName) 
+            => provider.IsAutoIncrement(tableName, colName);
     }
 }

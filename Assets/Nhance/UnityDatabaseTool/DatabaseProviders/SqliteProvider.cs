@@ -405,5 +405,26 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
         }
+
+        public bool IsAutoIncrement(string tableName, string columnName)
+        {
+            using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info('{tableName}');";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                if (reader.GetString(1).Equals(columnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var type = reader.GetString(2).ToUpper();
+                    var isPrimaryKey = reader.GetInt32(5) > 0;
+                    
+                    return type == "INTEGER" && isPrimaryKey && !tableName.Equals("sqlite_sequence");
+                }
+            }
+
+            return false;
+        }
     }
 }

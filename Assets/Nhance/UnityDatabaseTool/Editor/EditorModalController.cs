@@ -49,10 +49,10 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private string _columnName = string.Empty;
         private int _typeIndex;
-        
+
         private UnityDatabaseEditor _editor;
-        
-        
+
+
         private static readonly string[] _types =
             {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
 
@@ -94,8 +94,9 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private readonly Dictionary<string, object> _row;
         private UnityDatabaseEditor _editor;
-        
-        public DuplicateRowContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row)
+
+        public DuplicateRowContent(UnityDatabaseEditor editor, Database db, string table,
+            Dictionary<string, object> row)
         {
             _editor = editor;
             _db = db;
@@ -127,37 +128,135 @@ namespace Nhance.UnityDatabaseTool.Editor
 
     public class AddRowContent : IModalContent
     {
+        private readonly UnityDatabaseEditor _editor;
         private readonly Database _db;
         private readonly string _table;
-        private readonly List<string> _cols;
-        private readonly Dictionary<string, string> _values = new Dictionary<string, string>();
-        private UnityDatabaseEditor _editor;
+        private readonly List<Database.TableColumn> _cols;
+
+        private readonly Dictionary<string, object>
+            _values = new Dictionary<string, object>();
+
         public AddRowContent(UnityDatabaseEditor editor, Database db, string table)
         {
             _editor = editor;
             _db = db;
             _table = table;
 
-            _cols = db.GetColumnNames(table);
-            
-            foreach (var col in _cols) _values[col] = string.Empty;
+            _cols = db.GetTableColumns(table);
+
+            foreach (var col in _cols)
+            {
+                if (col.IsPrimaryKey && db.IsAutoIncrement(table, col.Name))
+                {
+                    continue;
+                }
+
+                _values[col.Name] = GetDefaultValueForType(col.Type);
+            }
         }
 
         public void OnGUI()
         {
             GUILayout.Label($"Add Row to '{_table}'", EditorStyles.boldLabel);
+            GUILayout.Space(5);
+
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Column", EditorStyles.boldLabel, GUILayout.Width(150));
+            EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(120));
+            EditorGUILayout.LabelField("Value", EditorStyles.boldLabel);
+            EditorGUILayout.EndHorizontal();
+
             foreach (var col in _cols)
             {
-                _values[col] = EditorGUILayout.TextField(col, _values[col]);
+                if (col.IsPrimaryKey && _db.IsAutoIncrement(_table, col.Name))
+                {
+                    EditorGUILayout.BeginHorizontal();
+                    EditorGUILayout.LabelField(new GUIContent(col.Name, "Primary Key - Auto-increment"),
+                        GUILayout.Width(150));
+                    EditorGUILayout.LabelField(col.Type, GUILayout.Width(120));
+                    EditorGUI.BeginDisabledGroup(true);
+                    EditorGUILayout.TextField("(Auto)");
+                    EditorGUI.EndDisabledGroup();
+                    EditorGUILayout.EndHorizontal();
+                    continue;
+                }
+
+                EditorGUILayout.BeginHorizontal();
+
+                EditorGUILayout.LabelField(col.Name, GUILayout.Width(150));
+                EditorGUILayout.LabelField(col.Type, GUILayout.Width(120));
+
+                DrawInputForColumn(col);
+
+                EditorGUILayout.EndHorizontal();
             }
 
             GUILayout.Space(10);
             if (GUILayout.Button("Insert", GUILayout.Height(25)))
             {
-                var row = new Dictionary<string, object>();
-                foreach (var col in _cols) row[col] = _values[col];
-                _db.InsertRow(_table, row);
+                _db.InsertRow(_table, _values);
                 CloseWindow();
+            }
+        }
+
+        private void DrawInputForColumn(Database.TableColumn col)
+        {
+            var baseType = GetBaseType(col.Type);
+            var colName = col.Name;
+
+            switch (baseType)
+            {
+                case "INT":
+                    _values[colName] = EditorGUILayout.IntField((int) (_values[colName] ?? 0));
+                    break;
+
+                case "REAL":
+                case "DECIMAL":
+                    _values[colName] = EditorGUILayout.FloatField((float) (_values[colName] ?? 0f));
+                    break;
+
+                case "DATE":
+                    EditorGUILayout.BeginHorizontal();
+                    _values[colName] = EditorGUILayout.TextField(_values[colName] as string ?? "");
+                    if (GUILayout.Button("Today", GUILayout.Width(50)))
+                    {
+                        _values[colName] = DateTime.Now.ToString("yyyy-MM-dd");
+                    }
+
+                    EditorGUILayout.EndHorizontal();
+                    break;
+
+                case "DATETIME":
+                    EditorGUILayout.BeginHorizontal();
+                    _values[colName] = EditorGUILayout.TextField(_values[colName] as string ?? "");
+                    if (GUILayout.Button("Now", GUILayout.Width(50)))
+                    {
+                        _values[colName] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                    }
+
+                    EditorGUILayout.EndHorizontal();
+                    break;
+
+                case "GameObject":
+                    _values[colName] =
+                        EditorGUILayout.ObjectField(_values[colName] as GameObject, typeof(GameObject), false);
+                    break;
+
+                case "Sprite":
+                    _values[colName] = EditorGUILayout.ObjectField(_values[colName] as Sprite, typeof(Sprite), false);
+                    break;
+
+                case "Vector2":
+                    _values[colName] = EditorGUILayout.Vector2Field("", (Vector2) (_values[colName] ?? Vector2.zero));
+                    break;
+
+                case "Vector3":
+                    _values[colName] = EditorGUILayout.Vector3Field("", (Vector3) (_values[colName] ?? Vector3.zero));
+                    break;
+
+                default:
+                    _values[colName] = EditorGUILayout.TextField(_values[colName] as string ?? "");
+                    break;
             }
         }
 
@@ -170,7 +269,35 @@ namespace Nhance.UnityDatabaseTool.Editor
             _db.RefreshTable(_editor.SelectedTableName);
             EditorWindow.focusedWindow.Close();
         }
+
+        private string GetBaseType(string fullType)
+        {
+            if (string.IsNullOrEmpty(fullType)) return "TEXT";
+            int parenthesisIndex = fullType.IndexOf('(');
+            if (parenthesisIndex > 0)
+            {
+                return fullType.Substring(0, parenthesisIndex).Trim().ToUpper();
+            }
+
+            return fullType.Trim().ToUpper();
+        }
+
+        private object GetDefaultValueForType(string fullType)
+        {
+            switch (GetBaseType(fullType))
+            {
+                case "INT": return 0;
+                case "REAL":
+                case "DECIMAL": return 0f;
+                case "Vector2": return Vector2.zero;
+                case "Vector3": return Vector3.zero;
+                case "GameObject":
+                case "Sprite": return null;
+                default: return string.Empty;
+            }
+        }
     }
+
 
     public class ChangeColumnContent : IModalContent
     {
@@ -181,14 +308,14 @@ namespace Nhance.UnityDatabaseTool.Editor
         private int _newTypeIndex;
         private bool _isPk;
         private UnityDatabaseEditor _editor;
-        
-        
+
+
         private static readonly string[] _types =
             {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
-        
+
         public ChangeColumnContent(UnityDatabaseEditor editor, Database db, string table, string column)
         {
-            _editor = editor;        
+            _editor = editor;
             _db = db;
             _table = table;
             _oldName = column;
@@ -228,7 +355,9 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly Dictionary<string, object> _row;
         private string _newVal;
         private UnityDatabaseEditor _editor;
-        public ChangeValueContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row, string column)
+
+        public ChangeValueContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row,
+            string column)
         {
             _editor = editor;
             _db = db;
@@ -289,7 +418,7 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void CloseWindow() => EditorWindow.focusedWindow.Close();
     }
-    
+
     public class CreateDatabaseContent : IModalContent
     {
         private readonly UnityDatabaseEditor _manager;
@@ -432,6 +561,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private readonly string _col;
         private UnityDatabaseEditor _editor;
+
         public DeleteColumnConfirmationContent(UnityDatabaseEditor editor, Database db, string table, string col)
         {
             _editor = editor;
@@ -468,8 +598,9 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string _table;
         private readonly Dictionary<string, object> _row;
         private UnityDatabaseEditor _editor;
-        
-        public DeleteRowConfirmationContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row)
+
+        public DeleteRowConfirmationContent(UnityDatabaseEditor editor, Database db, string table,
+            Dictionary<string, object> row)
         {
             _editor = editor;
             _db = db;
@@ -549,7 +680,7 @@ namespace Nhance.UnityDatabaseTool.Editor
             {
                 Debug.LogError("[ERROR] Database or rowData is null! Cannot delete row.");
             }
-            
+
             Close();
         }
     }

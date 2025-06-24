@@ -13,9 +13,24 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
     {
         private MySqlConnection _connection;
         private readonly string _connectionString;
+        private readonly string _databaseName;
 
         private List<Table> _tables = new();
-        public MySqlProvider(string connectionString) => _connectionString = connectionString;
+
+        public MySqlProvider(string connectionString)
+        {
+            try
+            {
+                var builder = new MySqlConnectionStringBuilder(connectionString);
+                _databaseName = builder.Database;
+                _connectionString = connectionString;
+            }
+            catch(Exception e)
+            {
+                Debug.LogError($"Could not parse database name from connection string: {connectionString}. Error: {e.Message}");
+                _databaseName = string.Empty;
+            }
+        }
 
         public List<string> GetTableNames()
         {
@@ -351,6 +366,39 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
 
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
+        }
+        
+        public bool IsAutoIncrement(string tableName, string columnName)
+        {
+            if (string.IsNullOrEmpty(_databaseName))
+            {
+                Debug.LogError("Database name is not set, cannot check for auto_increment in MySQL.");
+                return false;
+            }
+
+            using (var conn = new MySqlConnection(_connectionString))
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    // В MySQL метаданные хранятся в системной базе данных INFORMATION_SCHEMA.
+                    // Нам нужно проверить столбец 'EXTRA' на наличие флага 'auto_increment'.
+                    cmd.CommandText = "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS " +
+                                      "WHERE TABLE_SCHEMA = @dbName AND TABLE_NAME = @tableName AND COLUMN_NAME = @colName";
+            
+                    cmd.Parameters.AddWithValue("@dbName", _databaseName);
+                    cmd.Parameters.AddWithValue("@tableName", tableName);
+                    cmd.Parameters.AddWithValue("@colName", columnName);
+
+                    var result = cmd.ExecuteScalar();
+
+                    if (result != null && result != DBNull.Value)
+                    {
+                        return result.ToString().Contains("auto_increment");
+                    }
+                }
+            }
+            return false;
         }
     }
 }
