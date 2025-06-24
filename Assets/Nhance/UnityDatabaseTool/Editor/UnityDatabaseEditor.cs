@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using Mono.Data.Sqlite;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Nhance.UnityDatabaseTool.AiProviders;
 using Nhance.UnityDatabaseTool.Data;
@@ -42,7 +42,7 @@ namespace Nhance.UnityDatabaseTool.Editor
         private readonly string[] tabs = {"Overview", "Structure", "Search", "SQL"};
 
         private readonly string[] availableColumnTypes =
-            {"TEXT", "VARCHAR", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
+            {"TEXT", "VARCHAR", "INT", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3", "DECIMAL", "DATE"};
 
         private readonly string[] availableOperators = {"=", "!=", "LIKE", "<", ">", "<=", ">="};
 
@@ -90,13 +90,14 @@ namespace Nhance.UnityDatabaseTool.Editor
         private Vector2 scrollPosition;
         private Vector2 sqlScrollPosition;
 
-        private List<int> selectedColumnTypeIndices = new List<int>();
         private List<bool> tableSelections = new List<bool>();
         private List<bool> editedPrimaryKeys = new List<bool>();
         private List<bool> columnSelections = new List<bool>();
         private List<string> tableNames = new List<string>();
         private List<string> selectedTableNames = new List<string>();
         private List<string> editedColumnNames = new List<string>();
+        private List<string> editedColumnBaseTypes = new List<string>();
+        private List<string> editedColumnParameters = new List<string>();
         private List<string[]> tableData = new List<string[]>();
         private List<DatabaseConnection> connections = new List<DatabaseConnection>();
         private List<SearchFilter> searchFilters = new List<SearchFilter>();
@@ -169,6 +170,8 @@ namespace Nhance.UnityDatabaseTool.Editor
 
             EditorGUILayout.EndVertical();
         }
+
+
 
         private void DrawSearchBar()
         {
@@ -953,6 +956,21 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         #region Structure Tab
 
+        private void ParseFullType(string fullType, out string baseType, out string parameters)
+        {
+            int parenthesisIndex = fullType.IndexOf('(');
+            if (parenthesisIndex > 0)
+            {
+                baseType = fullType.Substring(0, parenthesisIndex).Trim().ToUpper();
+                parameters = fullType.Substring(parenthesisIndex);
+            }
+            else
+            {
+                baseType = fullType.Trim().ToUpper();
+                parameters = "";
+            }
+        }
+
         private void DrawStructure()
         {
             if (string.IsNullOrEmpty(selectedTableForContent))
@@ -973,13 +991,20 @@ namespace Nhance.UnityDatabaseTool.Editor
                 return;
             }
 
-            // Initialize storage lists if not set
-            if (editedColumnNames.Count != columns.Count || selectedColumnTypeIndices.Count != columns.Count)
+            // Initialize or update storage lists if the column count changes
+            if (editedColumnNames.Count != columns.Count)
             {
                 editedColumnNames = columns.Select(col => col.Name).ToList();
-                selectedColumnTypeIndices =
-                    columns.Select(col => Array.IndexOf(availableColumnTypes, col.Type)).ToList();
                 editedPrimaryKeys = columns.Select(col => col.IsPrimaryKey).ToList();
+                
+                editedColumnBaseTypes.Clear();
+                editedColumnParameters.Clear();
+                foreach (var col in columns)
+                {
+                    ParseFullType(col.Type, out string baseType, out string parameters);
+                    editedColumnBaseTypes.Add(baseType);
+                    editedColumnParameters.Add(parameters);
+                }
             }
 
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
@@ -1021,7 +1046,7 @@ namespace Nhance.UnityDatabaseTool.Editor
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             EditorGUILayout.LabelField("✔", GUILayout.Width(20));
             EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.Width(150));
-            EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(100));
+            EditorGUILayout.LabelField("Type", EditorStyles.boldLabel, GUILayout.Width(150));
             EditorGUILayout.LabelField("Primary Key", EditorStyles.boldLabel, GUILayout.Width(100));
             EditorGUILayout.EndHorizontal();
 
@@ -1032,8 +1057,35 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                 columnSelections[i] = EditorGUILayout.Toggle(columnSelections[i], GUILayout.Width(20));
                 editedColumnNames[i] = EditorGUILayout.TextField(editedColumnNames[i], GUILayout.Width(150));
-                selectedColumnTypeIndices[i] = EditorGUILayout.Popup(selectedColumnTypeIndices[i], availableColumnTypes,
-                    GUILayout.Width(100));
+
+                // --- MODIFIED TYPE EDITOR ---
+                // Find index of the current base type in our available types array
+                int selectedBaseTypeIndex = Array.IndexOf(availableColumnTypes, editedColumnBaseTypes[i]);
+                if (selectedBaseTypeIndex < 0) selectedBaseTypeIndex = 0; // Default to TEXT if not found
+
+                // Draw Popup for base type
+                int newSelectedBaseTypeIndex = EditorGUILayout.Popup(selectedBaseTypeIndex, availableColumnTypes, GUILayout.Width(80));
+                if (newSelectedBaseTypeIndex != selectedBaseTypeIndex)
+                {
+                    editedColumnBaseTypes[i] = availableColumnTypes[newSelectedBaseTypeIndex];
+                    // Clear parameters when type changes
+                    editedColumnParameters[i] = "";
+                }
+                
+                // Draw text field for parameters (e.g., (100) for VARCHAR)
+                // Only for types that support it
+                if (editedColumnBaseTypes[i] == "VARCHAR" || editedColumnBaseTypes[i] == "DECIMAL")
+                {
+                    editedColumnParameters[i] = EditorGUILayout.TextField(editedColumnParameters[i], GUILayout.Width(68));
+                }
+                else
+                {
+                    // For other types, show a disabled field to maintain alignment
+                    EditorGUI.BeginDisabledGroup(true);
+                    EditorGUILayout.TextField("", GUILayout.Width(68));
+                    EditorGUI.EndDisabledGroup();
+                }
+                // --- END OF MODIFIED TYPE EDITOR ---
 
                 bool wasPrimaryKey = editedPrimaryKeys[i];
                 editedPrimaryKeys[i] = EditorGUILayout.Toggle(editedPrimaryKeys[i], GUILayout.Width(100));
@@ -1155,16 +1207,31 @@ namespace Nhance.UnityDatabaseTool.Editor
 
         private void SaveColumnChanges(Database database)
         {
+            // Get original columns to compare against
+            List<Database.TableColumn> originalColumns = database.GetTableColumns(selectedTableForContent);
+
             for (var i = 0; i < editedColumnNames.Count; i++)
             {
+                var originalColumn = originalColumns[i];
                 var newColumnName = editedColumnNames[i];
-                var newColumnType = availableColumnTypes[selectedColumnTypeIndices[i]];
-                var isPrimaryKey = editedPrimaryKeys[i] && !editedPrimaryKeys.Contains(true) || editedPrimaryKeys[i];
+                
+                // Reconstruct the full column type from the base type and parameters
+                var newColumnType = editedColumnBaseTypes[i] + editedColumnParameters[i].Trim();
+                
+                var isPrimaryKey = editedPrimaryKeys[i];
 
-                database.ModifyColumn(selectedTableForContent, i, newColumnName, newColumnType, isPrimaryKey);
+                // Check if anything has actually changed for this column
+                if (originalColumn.Name != newColumnName || originalColumn.Type != newColumnType || originalColumn.IsPrimaryKey != isPrimaryKey)
+                {
+                     database.ModifyColumn(selectedTableForContent, originalColumn.Name, newColumnName, newColumnType, isPrimaryKey);
+                }
             }
 
+            // Force a reload of the structure and data from the database
             database.LoadTableContent(selectedTableForContent);
+            
+            // Invalidate the edited lists so they are rebuilt on the next DrawStructure call
+            editedColumnNames.Clear();
         }
 
         #endregion
@@ -1654,6 +1721,8 @@ namespace Nhance.UnityDatabaseTool.Editor
 
                 EditorGUILayout.EndHorizontal();
             }
+
+
 
             EditorGUILayout.EndScrollView();
         }

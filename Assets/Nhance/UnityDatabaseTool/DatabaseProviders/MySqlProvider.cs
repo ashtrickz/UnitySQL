@@ -297,21 +297,43 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             cmd.ExecuteNonQuery();
         }
 
-        public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
+        public void ModifyColumn(string tableName, string oldName, string newName, string newType, bool isPrimaryKey)
         {
-            var old = GetColumnNames(tableName)[columnIndex];
             using var conn = new MySqlConnection(_connectionString);
             conn.Open();
-            if (isPrimaryKey)
+            
+            string existingPrimaryKeyColumn = null;
+            using (var cmd = new MySqlCommand($"SHOW KEYS FROM `{tableName}` WHERE Key_name = 'PRIMARY'", conn))
             {
-                using var drop = new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", conn);
-                drop.ExecuteNonQuery();
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        existingPrimaryKeyColumn = reader.GetString(4);
+                    }
+                }
             }
+            
+            string commandText = $"ALTER TABLE `{tableName}` CHANGE COLUMN `{oldName}` `{newName}` {newType}";
 
-            using var cmd = new MySqlCommand(
-                $"ALTER TABLE `{tableName}` CHANGE COLUMN `{old}` `{newName}` {newType}"
-                + (isPrimaryKey ? " PRIMARY KEY" : "") + ";", conn);
-            cmd.ExecuteNonQuery();
+            using var transaction = conn.BeginTransaction();
+            
+            if (isPrimaryKey && oldName != existingPrimaryKeyColumn)
+            {
+                if (!string.IsNullOrEmpty(existingPrimaryKeyColumn))
+                {
+                    using var dropPkCmd = new MySqlCommand($"ALTER TABLE `{tableName}` DROP PRIMARY KEY;", conn, transaction);
+                    dropPkCmd.ExecuteNonQuery();
+                }
+                commandText += " PRIMARY KEY";
+            }
+            
+            using (var modifyCmd = new MySqlCommand(commandText + ";", conn, transaction))
+            {
+                modifyCmd.ExecuteNonQuery();
+            }
+    
+            transaction.Commit();
         }
 
         public void DeleteColumn(string tableName, string columnName)

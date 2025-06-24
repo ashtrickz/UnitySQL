@@ -39,8 +39,8 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 return;
 
             _connection = new SqliteConnection($"Data Source={_connectionString};Version=3;");
-            _connection.Open(); 
-                        
+            _connection.Open();
+
             if (_tables.Count > 0)
                 LoadTables(_tables);
         }
@@ -307,14 +307,86 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             cmd.ExecuteNonQuery();
         }
 
-        public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
+        public void ModifyColumn(string tableName, string oldName, string newName, string newType, bool isPrimaryKey)
         {
             using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
             conn.Open();
-            var oldName = GetColumnNames(tableName)[columnIndex];
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = $"ALTER TABLE {tableName} RENAME COLUMN {oldName} TO {newName};";
-            cmd.ExecuteNonQuery();
+
+            using var transaction = conn.BeginTransaction();
+            
+            var columns = new List<Tuple<string, string, bool>>();
+            var columnNames = new List<string>();
+            string tempOldPrimaryKey = null;
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"PRAGMA table_info('{tableName}');";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        var name = reader.GetString(1);
+                        var type = reader.GetString(2);
+                        var pk = reader.GetInt32(5) == 1;
+                        columns.Add(new Tuple<string, string, bool>(name, type, pk));
+                        columnNames.Add(name);
+                        if (pk) tempOldPrimaryKey = name;
+                    }
+                }
+            }
+            
+            var tempTableName = $"{tableName}_temp";
+            var createTableBuilder = new System.Text.StringBuilder($"CREATE TABLE {tempTableName} (");
+            var newColumnDefinitions = new List<string>();
+            
+            string newPrimaryKey = isPrimaryKey ? newName : (tempOldPrimaryKey != oldName ? tempOldPrimaryKey : null);
+
+            foreach (var col in columns)
+            {
+                var currentOldName = col.Item1;
+
+                newColumnDefinitions.Add(currentOldName == oldName
+                    ? $"'{newName}' {newType}"
+                    : $"'{currentOldName}' {col.Item2}");
+            }
+            
+            createTableBuilder.Append(string.Join(", ", newColumnDefinitions));
+            if (!string.IsNullOrEmpty(newPrimaryKey))
+            {
+                createTableBuilder.Append($", PRIMARY KEY('{newPrimaryKey}' AUTOINCREMENT)");
+            }
+
+            createTableBuilder.Append(");");
+            
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = createTableBuilder.ToString();
+                cmd.ExecuteNonQuery();
+            }
+            
+            var insertColumnNames = columnNames.Select(c => c == oldName ? newName : c);
+            var selectColumnNames = columnNames;
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    $"INSERT INTO {tempTableName} ({string.Join(", ", insertColumnNames.Select(n => $"'{n}'"))}) SELECT {string.Join(", ", selectColumnNames.Select(n => $"'{n}'"))} FROM {tableName};";
+                cmd.ExecuteNonQuery();
+            }
+            
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"DROP TABLE {tableName};";
+                cmd.ExecuteNonQuery();
+            }
+            
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $"ALTER TABLE {tempTableName} RENAME TO {tableName};";
+                cmd.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
         }
 
         public void DeleteColumn(string tableName, string columnName)

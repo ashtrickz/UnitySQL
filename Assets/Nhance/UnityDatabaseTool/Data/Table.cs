@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mono.Data.Sqlite;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 using UnityEditor;
 using UnityEngine;
 

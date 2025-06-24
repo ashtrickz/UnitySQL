@@ -27,7 +27,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         void DeleteRow(string tableName, Dictionary<string, object> rowData);
 
         void AddColumn(string tableName, string columnName, string columnType);
-        void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey);
+        void ModifyColumn(string tableName, string oldName, string newName, string newType, bool isPrimaryKey);
         void DeleteColumn(string tableName, string columnName);
 
         void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType);

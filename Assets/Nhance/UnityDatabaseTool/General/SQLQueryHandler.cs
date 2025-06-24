@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using Mono.Data.Sqlite;
 using UnityEngine;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 using Nhance.UnityDatabaseTool.Data;
 
 public static class SQLQueryHandler

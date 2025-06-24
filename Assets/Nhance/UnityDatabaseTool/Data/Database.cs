@@ -54,8 +54,8 @@ namespace Nhance.UnityDatabaseTool.Data
         public List<TableColumn> GetTableColumns(string selectedTableForContent)
             => provider.GetTableColumns(selectedTableForContent);
 
-        public void ModifyColumn(string tableName, int columnIndex, string newName, string newType, bool isPrimaryKey)
-            => provider.ModifyColumn(tableName, columnIndex, newName, newType, isPrimaryKey);
+        public void ModifyColumn(string tableName, string oldName, string newName, string newType, bool isPrimaryKey)
+            => provider.ModifyColumn(tableName, oldName, newName, newType, isPrimaryKey);
 
         public string GetPrimaryKeyColumn(string selectedTableForContent)
             => provider.GetPrimaryKeyColumn(selectedTableForContent);

@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 using UnityEngine;
 using Nhance.UnityDatabaseTool;
 using UnityEditor;

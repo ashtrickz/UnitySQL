@@ -204,7 +204,7 @@ namespace Nhance.UnityDatabaseTool.Editor
             GUILayout.Space(10);
             if (GUILayout.Button("Save", GUILayout.Height(25)))
             {
-                _db.ModifyColumn(_table, /* index= */ 0, _newName, _types[_newTypeIndex], _isPk);
+                _db.ModifyColumn(_table, /* index= */ _oldName, _newName, _types[_newTypeIndex], _isPk);
                 CloseWindow();
             }
         }
