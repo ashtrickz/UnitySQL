@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using Nhance.UnityDatabaseTool.DatabaseProviders;
+using UnityEditor;
+using UnityEngine;
 using EConnectionType = Nhance.UnityDatabaseTool.Data.DatabaseConnection.EConnectionType;
 
 namespace Nhance.UnityDatabaseTool.Data
@@ -79,7 +81,7 @@ namespace Nhance.UnityDatabaseTool.Data
             => provider.DeleteRow(tableName, rowData);
 
         public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
-            string newValue)
+            object newValue)
             => provider.UpdateCellValue(tableName, rowData, columnName, newValue);
 
         public void RefreshConnection() 
@@ -96,6 +98,11 @@ namespace Nhance.UnityDatabaseTool.Data
         {
             public string Name;
             public string Type;
+            
+            public int Length = 255; 
+            
+            public bool IsNotNull;
+            public bool IsUnique;
         }
 
         public void RefreshTable(string selectedTableName)

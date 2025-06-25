@@ -23,7 +23,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         bool CheckPrimaryKeyExists(string tableName, string primaryKeyColumn, string keyValue);
 
         void InsertRow(string tableName, Dictionary<string, object> rowData);
-        void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, string newValue);
+        void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName, object newValue);
         void DeleteRow(string tableName, Dictionary<string, object> rowData);
 
         void AddColumn(string tableName, string columnName, string columnType);

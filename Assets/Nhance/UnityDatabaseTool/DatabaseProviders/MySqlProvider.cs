@@ -3,8 +3,10 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json;
 using Nhance.UnityDatabaseTool.Data;
 using Unity.VisualScripting;
+using UnityEditor;
 using UnityEngine;
 
 namespace Nhance.UnityDatabaseTool.DatabaseProviders
@@ -31,6 +33,53 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     $"Could not parse database name from connection string: {connectionString}. Error: {e.Message}");
                 _databaseName = string.Empty;
             }
+        }
+
+        public string GetAssetPath(UnityEngine.Object assetObject)
+        {
+#if UNITY_EDITOR
+            if (assetObject == null)
+            {
+                return null;
+            }
+
+            string path = AssetDatabase.GetAssetPath(assetObject);
+
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogWarning(
+                    $"Object '{assetObject.name}' is not saved asset. Path cant be get.",
+                    assetObject);
+                return null;
+            }
+
+            return path;
+#else
+        Debug.LogError("GetAssetPath is an Editor-only method.");
+        return null;
+#endif
+        }
+
+        public T LoadAssetFromPath<T>(string path) where T : UnityEngine.Object
+        {
+#if UNITY_EDITOR
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            T asset = AssetDatabase.LoadAssetAtPath<T>(path);
+
+            if (asset == null)
+            {
+                Debug.LogWarning($"Failed to get {typeof(T)} by path: {path}");
+            }
+
+            return asset;
+#else
+        Debug.LogError("LoadAssetFromPath is an Editor-only method.");
+        return null;
+#endif
         }
 
         public List<string> GetTableNames()
@@ -247,28 +296,56 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         }
 
         public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
-            string newValue)
+            object newValue)
         {
             using var conn = new MySqlConnection(_connectionString);
             conn.Open();
             var pk = GetPrimaryKeyColumn(tableName);
             if (pk == null || !rowData.ContainsKey(pk))
             {
-                Debug.LogError($"[ERROR] Cannot update '{columnName}' in '{tableName}': No primary key found.");
+                Debug.LogError(
+                    $"[ERROR] Cannot update '{columnName}' in '{tableName}': No primary key found or its value is missing.");
                 return;
             }
 
-            object converted = newValue;
-            var orig = rowData[columnName];
-            if (orig is long) converted = long.TryParse(newValue, out var lv) ? lv : newValue;
-            else if (orig is int) converted = int.TryParse(newValue, out var iv) ? iv : newValue;
-            else if (orig is double) converted = double.TryParse(newValue, out var dv) ? dv : newValue;
+            object valueToDb;
 
-            using var cmd = new MySqlCommand(
-                $"UPDATE `{tableName}` SET `{columnName}` = @new WHERE `{pk}` = @pk;", conn);
-            cmd.Parameters.AddWithValue("@new", converted);
-            cmd.Parameters.AddWithValue("@pk", rowData[pk]);
-            cmd.ExecuteNonQuery();
+            switch (newValue)
+            {
+                case Vector2 v2:
+                    valueToDb = JsonConvert.SerializeObject(new {x = v2.x, y = v2.y});
+                    break;
+                case Vector3 v3:
+                    valueToDb = JsonConvert.SerializeObject(new {x = v3.x, y = v3.y, z = v3.z});
+                    break;
+
+                case Sprite sprite:
+                    valueToDb = GetAssetPath(sprite);
+                    break;
+                case GameObject go:
+                    valueToDb = GetAssetPath(go);
+                    break;
+
+                default:
+                    valueToDb = newValue;
+                    break;
+            }
+
+            try
+            {
+                using var cmd = new MySqlCommand(
+                    $"UPDATE `{tableName}` SET `{columnName}` = @newValue WHERE `{pk}` = @primaryKeyValue;", conn);
+
+                cmd.Parameters.AddWithValue("@newValue", valueToDb);
+                cmd.Parameters.AddWithValue("@primaryKeyValue", rowData[pk]);
+
+                int rowsAffected = cmd.ExecuteNonQuery();
+                Debug.Log($"[Database] Update successful. Rows affected: {rowsAffected}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Database] Error updating cell value: {ex.Message}");
+            }
         }
 
         public void DeleteRow(string tableName, Dictionary<string, object> rowData)
@@ -366,22 +443,25 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         public void ChangeColumnType(string tableName, string oldColumnName, string newColumnName, string newColumnType)
         {
         }
-        
+
         public void MakePrimaryKey(string tableName, string newPrimaryKey)
         {
             try
             {
                 var columns = GetTableColumns(tableName);
-                var columnToModify = columns.FirstOrDefault(c => c.Name.Equals(newPrimaryKey, StringComparison.OrdinalIgnoreCase));
+                var columnToModify =
+                    columns.FirstOrDefault(c => c.Name.Equals(newPrimaryKey, StringComparison.OrdinalIgnoreCase));
 
                 if (columnToModify != null)
                     ModifyColumn(tableName, newPrimaryKey, newPrimaryKey, columnToModify.Type, true);
                 else
-                    Debug.LogError($"[MySQL Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
+                    Debug.LogError(
+                        $"[MySQL Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[MySQL Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
+                Debug.LogError(
+                    $"[MySQL Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
             }
         }
 

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using Mono.Data.Sqlite;
 using Nhance.UnityDatabaseTool.Data;
+using UnityEditor;
 using UnityEngine;
 
 namespace Nhance.UnityDatabaseTool.DatabaseProviders
@@ -15,6 +16,53 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         private readonly string _connectionString;
         private List<Table> _tables = new();
         public SqliteProvider(string connectionString) => _connectionString = connectionString;
+
+        public string GetAssetPath(UnityEngine.Object assetObject)
+        {
+#if UNITY_EDITOR
+            if (assetObject == null)
+            {
+                return null;
+            }
+
+            string path = AssetDatabase.GetAssetPath(assetObject);
+
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogWarning(
+                    $"Object '{assetObject.name}' is not saved asset. Path cant be get.",
+                    assetObject);
+                return null;
+            }
+
+            return path;
+#else
+        Debug.LogError("GetAssetPath is an Editor-only method.");
+        return null;
+#endif
+        }
+
+        public T LoadAssetFromPath<T>(string path) where T : UnityEngine.Object
+        {
+#if UNITY_EDITOR
+            if (string.IsNullOrEmpty(path))
+            {
+                return null;
+            }
+
+            T asset = AssetDatabase.LoadAssetAtPath<T>(path);
+
+            if (asset == null)
+            {
+                Debug.LogWarning($"Failed to get {typeof(T)} by path: {path}");
+            }
+
+            return asset;
+#else
+        Debug.LogError("LoadAssetFromPath is an Editor-only method.");
+        return null;
+#endif
+        }
 
         public List<string> GetTableNames()
         {
@@ -194,7 +242,8 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     try
                     {
                         using var sampleCmd =
-                            new SqliteCommand($"SELECT {columnName} FROM {tableName} WHERE {columnName} IS NOT NULL LIMIT 1;", conn);
+                            new SqliteCommand(
+                                $"SELECT {columnName} FROM {tableName} WHERE {columnName} IS NOT NULL LIMIT 1;", conn);
                         using var sr = sampleCmd.ExecuteReader();
                         if (sr.Read() && !sr.IsDBNull(0) && sr[0] is string s && s.Contains(","))
                         {
@@ -242,31 +291,79 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
         }
 
         public void UpdateCellValue(string tableName, Dictionary<string, object> rowData, string columnName,
-            string newValue)
+            object newValue)
         {
-            using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
+            using var conn = new SqliteConnection($"Data Source={_connectionString}");
             conn.Open();
+
             var pk = GetPrimaryKeyColumn(tableName);
-            if (pk == null || !rowData.ContainsKey(pk))
+            if (string.IsNullOrEmpty(pk) || !rowData.ContainsKey(pk))
             {
-                Debug.LogError($"[ERROR] Cannot update '{columnName}' in '{tableName}': No primary key found.");
+                Debug.LogError(
+                    $"[ERROR] Cannot update '{columnName}' in '{tableName}': No primary key found or its value is missing in the provided row data.");
                 return;
             }
+            
+            object valueToDb;
+            
+            switch (newValue)
+            {
+                case Vector2 v2:
+                    valueToDb = JsonUtility.ToJson(v2);
+                    break;
 
-            object converted = newValue;
-            var orig = rowData[columnName];
-            if (orig is long)
-                converted = long.TryParse(newValue, out var lv) ? lv : newValue;
-            else if (orig is int)
-                converted = int.TryParse(newValue, out var iv) ? iv : newValue;
-            else if (orig is double)
-                converted = double.TryParse(newValue, out var dv) ? dv : newValue;
+                case Vector3 v3:
+                    valueToDb = JsonUtility.ToJson(v3);
+                    break;
 
-            using var cmd = new SqliteCommand(
-                $"UPDATE {tableName} SET {columnName} = @val WHERE {pk} = @pk;", conn);
-            cmd.Parameters.AddWithValue("@val", converted);
-            cmd.Parameters.AddWithValue("@pk", rowData[pk]);
-            cmd.ExecuteNonQuery();
+                case Sprite sprite:
+                    valueToDb = GetAssetPath(sprite);
+                    break;
+
+                case GameObject go:
+#if UNITY_EDITOR
+                    if (PrefabUtility.IsPartOfPrefabAsset(go))
+                    {
+                        valueToDb = GetAssetPath(go);
+                    }
+                    else
+                    {
+                        Debug.LogWarning(
+                            $"GameObject '{go.name}' is not saved prefab. Skipping update.",
+                            go);
+                        valueToDb = null;
+                    }
+#else
+                valueToDb = null;
+#endif
+                    break;
+                
+                default:
+                    valueToDb = newValue;
+                    break;
+            }
+
+            if (valueToDb == null && (newValue is Sprite || newValue is GameObject))
+            {
+                Debug.Log("Path was not acquired. Skipping...");
+                return;
+            }
+            
+            try
+            {
+                using var cmd = new SqliteCommand(
+                    $"UPDATE `{tableName}` SET `{columnName}` = @newValue WHERE `{pk}` = @primaryKeyValue;", conn);
+                
+                cmd.Parameters.AddWithValue("@newValue", valueToDb);
+                cmd.Parameters.AddWithValue("@primaryKeyValue", rowData[pk]);
+
+                int rowsAffected = cmd.ExecuteNonQuery();
+                Debug.Log($"[Database] Update successful for table '{tableName}'. Rows affected: {rowsAffected}");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Database] Error while updating cell value for table '{tableName}': {ex.Message}");
+            }
         }
 
         public void DeleteRow(string tableName, Dictionary<string, object> rowData)
@@ -321,20 +418,23 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             {
                 var columns = GetTableColumns(tableName);
                 string tempOldPrimaryKey = columns.FirstOrDefault(c => c.IsPrimaryKey)?.Name;
-                
+
                 var tempTableName = $"{tableName}_temp";
                 var createTableBuilder = new StringBuilder($"CREATE TABLE {tempTableName} (");
                 var newColumnDefinitions = new List<string>();
-                
-                string newPrimaryKey = isPrimaryKey ? newName : (tempOldPrimaryKey != oldName ? tempOldPrimaryKey : null);
+
+                string newPrimaryKey =
+                    isPrimaryKey ? newName : (tempOldPrimaryKey != oldName ? tempOldPrimaryKey : null);
 
                 foreach (var col in columns)
                 {
                     var currentOldName = col.Name;
-                    var definition = currentOldName == oldName ? $"{newName} {newType}" : $"{currentOldName} {col.Type}";
+                    var definition = currentOldName == oldName
+                        ? $"{newName} {newType}"
+                        : $"{currentOldName} {col.Type}";
                     newColumnDefinitions.Add(definition);
                 }
-                
+
                 createTableBuilder.Append(string.Join(", ", newColumnDefinitions));
                 if (!string.IsNullOrEmpty(newPrimaryKey))
                 {
@@ -343,18 +443,19 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     {
                         createTableBuilder.Append(" AUTOINCREMENT");
                     }
+
                     createTableBuilder.Append(")");
                 }
+
                 createTableBuilder.Append(");");
-                
+
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
                     cmd.CommandText = createTableBuilder.ToString();
                     cmd.ExecuteNonQuery();
                 }
-                
-                // ИСПРАВЛЕНИЕ: Убраны одинарные кавычки вокруг имен столбцов, чтобы копировались данные, а не названия.
+
                 var originalColumnNames = columns.Select(c => c.Name).ToList();
                 var insertColumnNames = columns.Select(c => c.Name == oldName ? newName : c.Name).ToList();
 
@@ -365,14 +466,14 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                         $"INSERT INTO {tempTableName} ({string.Join(", ", insertColumnNames)}) SELECT {string.Join(", ", originalColumnNames)} FROM {tableName};";
                     cmd.ExecuteNonQuery();
                 }
-                
+
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
                     cmd.CommandText = $"DROP TABLE {tableName};";
                     cmd.ExecuteNonQuery();
                 }
-                
+
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
@@ -388,34 +489,36 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 transaction.Rollback();
             }
         }
-        
+
         public void DeleteColumn(string tableName, string columnName)
         {
             using var conn = new SqliteConnection($"Data Source={_connectionString};Version=3;");
             conn.Open();
             using var transaction = conn.BeginTransaction();
-            
+
             try
             {
                 var columns = GetTableColumns(tableName);
-                var remainingColumns = columns.Where(c => !c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase)).ToList();
+                var remainingColumns =
+                    columns.Where(c => !c.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase)).ToList();
                 if (remainingColumns.Count == columns.Count)
                 {
                     Debug.LogWarning($"[SQLite Provider] Column '{columnName}' not found in table '{tableName}'.");
                     return;
                 }
-                
+
                 string pkName = remainingColumns.FirstOrDefault(c => c.IsPrimaryKey)?.Name;
 
                 var tempTableName = $"{tableName}_temp";
                 var createTableBuilder = new StringBuilder($"CREATE TABLE {tempTableName} (");
                 var newColumnDefinitions = remainingColumns.Select(col => $"{col.Name} {col.Type}").ToList();
                 createTableBuilder.Append(string.Join(", ", newColumnDefinitions));
-                
+
                 if (!string.IsNullOrEmpty(pkName))
                 {
-                     createTableBuilder.Append($", PRIMARY KEY({pkName})");
+                    createTableBuilder.Append($", PRIMARY KEY({pkName})");
                 }
+
                 createTableBuilder.Append(");");
 
                 using (var cmd = conn.CreateCommand())
@@ -424,14 +527,14 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     cmd.CommandText = createTableBuilder.ToString();
                     cmd.ExecuteNonQuery();
                 }
-                
-                // ИСПРАВЛЕНИЕ: Убраны одинарные кавычки вокруг имен столбцов.
+
                 var insertColumnNames = string.Join(", ", remainingColumns.Select(c => c.Name));
 
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
-                    cmd.CommandText = $"INSERT INTO {tempTableName} ({insertColumnNames}) SELECT {insertColumnNames} FROM {tableName};";
+                    cmd.CommandText =
+                        $"INSERT INTO {tempTableName} ({insertColumnNames}) SELECT {insertColumnNames} FROM {tableName};";
                     cmd.ExecuteNonQuery();
                 }
 
@@ -441,7 +544,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                     cmd.CommandText = $"DROP TABLE {tableName};";
                     cmd.ExecuteNonQuery();
                 }
-                
+
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.Transaction = transaction;
@@ -453,7 +556,8 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
             }
             catch (Exception e)
             {
-                Debug.LogError($"[SQLite Provider] Failed to delete column '{columnName}' from table '{tableName}'. Error: {e.Message}");
+                Debug.LogError(
+                    $"[SQLite Provider] Failed to delete column '{columnName}' from table '{tableName}'. Error: {e.Message}");
                 transaction.Rollback();
             }
         }
@@ -472,11 +576,13 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 if (columnToModify != null)
                     ModifyColumn(tableName, newPrimaryKey, newPrimaryKey, columnToModify.Type, true);
                 else
-                    Debug.LogError($"[SQLite Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
+                    Debug.LogError(
+                        $"[SQLite Provider] Column '{newPrimaryKey}' not found in table '{tableName}'. Cannot make it a primary key.");
             }
             catch (Exception e)
             {
-                Debug.LogError($"[SQLite Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
+                Debug.LogError(
+                    $"[SQLite Provider] Failed to make column '{newPrimaryKey}' a primary key in table '{tableName}'. Error: {e.Message}");
             }
         }
 
@@ -493,7 +599,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
                 {
                     var type = reader.GetString(2).ToUpper();
                     var isPrimaryKey = reader.GetInt32(5) > 0;
-                    
+
                     return type == "INTEGER" && isPrimaryKey && !tableName.Equals("sqlite_sequence");
                 }
             }

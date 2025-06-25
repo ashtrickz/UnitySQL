@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Nhance.UnityDatabaseTool.Data;
 using UnityEditor;
 using UnityEngine;
@@ -348,47 +349,99 @@ namespace Nhance.UnityDatabaseTool.Editor
     }
 
     public class ChangeValueContent : IModalContent
+{
+    private readonly Database _db;
+    private readonly UnityDatabaseEditor _editor;
+    private readonly string _table;
+    private readonly string _col;
+    private readonly Dictionary<string, object> _row;
+
+    // Храним новое значение как object, чтобы поддерживать разные типы
+    private object _newValue;
+    // Храним тип колонки, чтобы знать, какой UI рисовать
+    private readonly string _columnType;
+
+    public ChangeValueContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row, string column)
     {
-        private readonly Database _db;
-        private readonly string _table;
-        private readonly string _col;
-        private readonly Dictionary<string, object> _row;
-        private string _newVal;
-        private UnityDatabaseEditor _editor;
+        _editor = editor;
+        _db = db;
+        _table = table;
+        _row = row;
+        _col = column;
+        
+        // Получаем оригинальное значение
+        _newValue = row[column];
+        
+        // Получаем тип колонки. Предполагается, что у вас есть метод для этого.
+        // Если нет, вам нужно будет его добавить.
+        _columnType = _db.GetColumnType(_table, _col);
+    }
 
-        public ChangeValueContent(UnityDatabaseEditor editor, Database db, string table, Dictionary<string, object> row,
-            string column)
+    public void OnGUI()
+    {
+        GUILayout.Label($"Change '{_col}' in '{_table}' (Type: {_columnType})", EditorStyles.boldLabel);
+
+        // Используем switch для отображения правильного поля редактора
+        // в зависимости от типа данных колонки.
+        switch (_columnType)
         {
-            _editor = editor;
-            _db = db;
-            _table = table;
-            _row = row;
-            _col = column;
-            _newVal = row[column]?.ToString() ?? string.Empty;
+            case "INTEGER":
+                // SQLite возвращает long, поэтому конвертируем из long.
+                int currentInt = Convert.ToInt32(_newValue);
+                _newValue = EditorGUILayout.IntField(_col, currentInt);
+                break;
+            
+            case "REAL":
+            case "DECIMAL":
+                // SQLite возвращает double, конвертируем в float для редактора.
+                float currentFloat = Convert.ToSingle(_newValue);
+                _newValue = EditorGUILayout.FloatField(_col, currentFloat);
+                break;
+
+            case "Vector2":
+                // Пытаемся безопасно привести к Vector2, если не получается - используем Vector2.zero
+                Vector2 currentVec2 = (_newValue is Vector2 v2) ? v2 : Vector2.zero;
+                _newValue = EditorGUILayout.Vector2Field(_col, currentVec2);
+                break;
+                
+            case "Vector3":
+                Vector3 currentVec3 = (_newValue is Vector3 v3) ? v3 : Vector3.zero;
+                _newValue = EditorGUILayout.Vector3Field(_col, currentVec3);
+                break;
+            
+            // Для всех остальных типов (TEXT, VARCHAR, DATE, BLOB и кастомных) используем текстовое поле
+            default:
+                string currentStr = _newValue?.ToString() ?? string.Empty;
+                _newValue = EditorGUILayout.TextField(_col, currentStr);
+                break;
         }
 
-        public void OnGUI()
+        GUILayout.Space(10);
+        if (GUILayout.Button("Update", GUILayout.Height(25)))
         {
-            GUILayout.Label($"Change '{_col}' in '{_table}'", EditorStyles.boldLabel);
-            _newVal = EditorGUILayout.TextField(_col, _newVal);
-            GUILayout.Space(10);
-            if (GUILayout.Button("Update", GUILayout.Height(25)))
-            {
-                _db.UpdateCellValue(_table, _row, _col, _newVal);
-                CloseWindow();
-            }
-        }
-
-        public void OnClose()
-        {
-        }
-
-        private void CloseWindow()
-        {
-            _db.RefreshTable(_editor.SelectedTableName);
-            EditorWindow.focusedWindow.Close();
+            // Теперь _newValue имеет правильный тип (int, float, Vector2, string и т.д.)
+            _db.UpdateCellValue(_table, _row, _col, _newValue);
+            CloseWindow();
         }
     }
+
+    public void OnClose() { }
+
+    private void CloseWindow()
+    {
+        // Обновляем отображение таблицы после изменения
+        if (_editor != null && !string.IsNullOrEmpty(_editor.SelectedTableName))
+        {
+            _db.RefreshTable(_editor.SelectedTableName);
+        }
+        
+        var window = EditorWindow.focusedWindow;
+        if (window != null)
+        {
+            window.Close();
+        }
+    }
+}
 
     public class ConfirmationContent : IModalContent
     {
@@ -471,75 +524,127 @@ namespace Nhance.UnityDatabaseTool.Editor
     public class CreateTableContent : IModalContent
     {
         private readonly Database _database;
-        private string _tableName;
+        private string _tableName = "";
+        private Vector2 _scrollPosition;
+        
         private readonly List<Database.ColumnDefinition> _columns = new List<Database.ColumnDefinition>();
         private int _primaryKeyIndex = -1;
-
+        
         private static readonly string[] _columnTypes =
-            {"TEXT", "INTEGER", "REAL", "BLOB", "GameObject", "Sprite", "Vector2", "Vector3"};
+        {
+            "TEXT", "INTEGER", "REAL", "BLOB", "VARCHAR", "DECIMAL", "DATE",
+            "GameObject", "Sprite", "Vector2", "Vector3"
+        };
 
         public CreateTableContent(Database database)
         {
             _database = database;
+            AddNewColumn();
         }
 
         public void OnGUI()
         {
-            GUILayout.Label("Create New Table", EditorStyles.boldLabel);
-            _tableName = EditorGUILayout.TextField("Table Name:", _tableName);
-
+            EditorGUILayout.LabelField("Create New Table", EditorStyles.boldLabel);
+            GUILayout.Space(5);
+            _tableName = EditorGUILayout.TextField("Table Name", _tableName);
             GUILayout.Space(10);
-            GUILayout.Label("Columns:", EditorStyles.boldLabel);
+            
+            EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("Column Name", EditorStyles.boldLabel, GUILayout.MinWidth(150),
+                GUILayout.MaxWidth(250));
+            EditorGUILayout.LabelField("Data Type", EditorStyles.boldLabel, GUILayout.Width(100));
+            EditorGUILayout.LabelField("Length", EditorStyles.boldLabel, GUILayout.Width(50));
+            EditorGUILayout.LabelField("PK", EditorStyles.boldLabel, GUILayout.Width(25));
+            EditorGUILayout.LabelField("Not Null", EditorStyles.boldLabel, GUILayout.Width(60));
+            EditorGUILayout.LabelField("Unique", EditorStyles.boldLabel, GUILayout.Width(50));
+            EditorGUILayout.LabelField("Action", EditorStyles.boldLabel, GUILayout.Width(50));
+            EditorGUILayout.EndHorizontal();
+            
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandHeight(true));
 
             for (int i = 0; i < _columns.Count; i++)
             {
+                var column = _columns[i];
                 EditorGUILayout.BeginHorizontal();
+                
+                column.Name = EditorGUILayout.TextField(column.Name, GUILayout.MinWidth(150), GUILayout.MaxWidth(250));
+                
+                int typeIndex = System.Array.IndexOf(_columnTypes, column.Type);
+                if (typeIndex == -1) typeIndex = 0;
+                column.Type = _columnTypes[EditorGUILayout.Popup(typeIndex, _columnTypes, GUILayout.Width(100))];
+                
+                if (column.Type == "VARCHAR")
+                {
+                    column.Length = EditorGUILayout.IntField(column.Length, GUILayout.Width(50));
+                }
+                else
+                {
+                    GUILayout.Space(54);
+                }
 
-                _columns[i].Name = EditorGUILayout.TextField(_columns[i].Name, GUILayout.Width(150));
-                _columns[i].Type = _columnTypes[
-                    EditorGUILayout.Popup(
-                        System.Array.IndexOf(_columnTypes, _columns[i].Type),
-                        _columnTypes, GUILayout.Width(100)
-                    )
-                ];
-
-                EditorGUILayout.LabelField("Is Primary Key:", GUILayout.Width(90));
+                // Primary Key (PK)
                 bool isPk = (_primaryKeyIndex == i);
-                bool newPk = EditorGUILayout.Toggle(isPk, GUILayout.Width(20));
-                if (newPk && !isPk) _primaryKeyIndex = i;
-                else if (!newPk && isPk) _primaryKeyIndex = -1;
+                bool newIsPk = EditorGUILayout.Toggle(isPk, GUILayout.Width(25));
+                if (newIsPk && !isPk)
+                {
+                    _primaryKeyIndex = i;
+                    column.IsNotNull = true;
+                    column.IsUnique = true;
+                }
+                else if (!newIsPk && isPk)
+                {
+                    _primaryKeyIndex = -1;
+                }
+                
+                GUI.enabled = !isPk;
+                column.IsNotNull = EditorGUILayout.Toggle(column.IsNotNull, GUILayout.Width(60));
+                column.IsUnique = EditorGUILayout.Toggle(column.IsUnique, GUILayout.Width(50));
+                GUI.enabled = true;
 
-                if (GUILayout.Button("x", GUILayout.Width(25)))
+                
+                if (GUILayout.Button("-", GUILayout.Width(50)))
                 {
                     if (_primaryKeyIndex == i) _primaryKeyIndex = -1;
+                    else if (_primaryKeyIndex > i) _primaryKeyIndex--;
+
                     _columns.RemoveAt(i);
+                    EditorGUILayout.EndHorizontal();
                     break;
                 }
 
                 EditorGUILayout.EndHorizontal();
             }
 
-            if (GUILayout.Button("+", GUILayout.Width(30), GUILayout.Height(25)))
+            EditorGUILayout.EndScrollView();
+            
+            if (GUILayout.Button("Add Column", GUILayout.Height(25)))
             {
-                _columns.Add(new Database.ColumnDefinition {Name = "", Type = "TEXT"});
+                AddNewColumn();
             }
 
-            GUILayout.Space(10);
+            GUILayout.FlexibleSpace();
+            
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button("Create Table", GUILayout.Height(25)))
+            
+            bool canCreateTable = !string.IsNullOrWhiteSpace(_tableName) && _columns.Count > 0;
+            GUI.enabled = canCreateTable;
+
+            if (GUILayout.Button("Create Table", GUILayout.Height(30)))
             {
-                if (!string.IsNullOrEmpty(_tableName) && _columns.Count > 0)
+                if (_columns.GroupBy(c => c.Name.ToLower()).Any(g => g.Count() > 1))
+                {
+                    EditorUtility.DisplayDialog("Error", "Column names must be unique.", "OK");
+                }
+                else
                 {
                     _database.CreateTable(_tableName, _columns, _primaryKeyIndex);
                     CloseWindow();
                 }
-                else
-                {
-                    Debug.LogError("[ERROR] Table name and at least one column are required.");
-                }
             }
 
-            if (GUILayout.Button("Cancel", GUILayout.Height(25)))
+            GUI.enabled = true;
+
+            if (GUILayout.Button("Cancel", GUILayout.Height(30)))
             {
                 CloseWindow();
             }
@@ -547,11 +652,23 @@ namespace Nhance.UnityDatabaseTool.Editor
             EditorGUILayout.EndHorizontal();
         }
 
+        private void AddNewColumn()
+        {
+            _columns.Add(new Database.ColumnDefinition {Name = "", Type = "TEXT", Length = 255});
+        }
+
         public void OnClose()
         {
         }
 
-        private void CloseWindow() => EditorWindow.focusedWindow.Close();
+        private void CloseWindow()
+        {
+            var window = EditorWindow.focusedWindow;
+            if (window != null)
+            {
+                window.Close();
+            }
+        }
     }
 
 

@@ -45,7 +45,7 @@ public class UnitySQLRuntime : MonoBehaviour
     
     private void Start()
     {
-        // Connection();
+        Connection();
         
         OnDatabaseChanged = new(database =>
         {
@@ -89,30 +89,30 @@ public class UnitySQLRuntime : MonoBehaviour
         addRowModalUI.gameObject.SetActive(false);
     }
     
-    // public void Connection()
-    // {
-    //     connections.Add(new DatabaseConnection(databaseFilePath));
-    //     
-    //     connections.ForEach(connection =>
-    //     {
-    //         var connectionItemTransform = Instantiate(connectionItemTemplate, connectionsLayoutGroup);
-    //         connectionItemTransform.TryGetComponent<ConnectionItemUI>(out var connectionItem);
-    //         connectionItem.Initialize(connection, overviewGridDrawerUI);
-    //         
-    //         connectionItem.DatabaseItemUIs.ForEach(databaseItem =>
-    //         {
-    //             databaseItem.TableItemUIs.ForEach(tableItem =>
-    //             {
-    //                 tableItem.OnTableChose += (database, table) =>
-    //                 {
-    //                     this.table = table;
-    //                     tabsContainer.gameObject.SetActive(true);
-    //                     OnDatabaseChanged?.Invoke(database);
-    //                 };
-    //             });
-    //         });
-    //     });
-    // }
+    public void Connection()
+    {
+        connections.Add(new DatabaseConnection(databaseFilePath, DatabaseConnection.EConnectionType.SQLite));
+        
+        connections.ForEach(connection =>
+        {
+            var connectionItemTransform = Instantiate(connectionItemTemplate, connectionsLayoutGroup);
+            connectionItemTransform.TryGetComponent<ConnectionItemUI>(out var connectionItem);
+            connectionItem.Initialize(connection, overviewGridDrawerUI);
+            
+            connectionItem.DatabaseItemUIs.ForEach(databaseItem =>
+            {
+                databaseItem.TableItemUIs.ForEach(tableItem =>
+                {
+                    tableItem.OnTableChose += (database, table) =>
+                    {
+                        this.table = table;
+                        tabsContainer.gameObject.SetActive(true);
+                        OnDatabaseChanged?.Invoke(database);
+                    };
+                });
+            });
+        });
+    }
 
     public void CloseAllTabs()
     {
