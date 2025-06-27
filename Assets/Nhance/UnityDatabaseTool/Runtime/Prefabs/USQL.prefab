@@ -939,7 +939,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3f9395d4399255949aefc5ec7773d743, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  databaseFilePath: Assets/Nhance/USQL/Connections/data.sqlite
+  databaseFilePath: Assets/Nhance/UnityDatabaseTool/Connections/data.sqlite
   tabs:
   - button: {fileID: 3054855843186334979}
     panel: {fileID: 7993452537454770544}

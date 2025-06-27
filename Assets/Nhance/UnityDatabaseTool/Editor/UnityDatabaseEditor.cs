@@ -131,10 +131,10 @@ namespace Nhance.UnityDatabaseTool.Editor
             };
         }
 
-        [MenuItem("Nhance/Tools/Unity Database Tool")]
+        [MenuItem("Tools/Nhance/Unity Database Manager")]
         public static void ShowWindow()
         {
-            var window = GetWindow<UnityDatabaseEditor>("Nhance Unity Database Tool");
+            var window = GetWindow<UnityDatabaseEditor>("Nhance Unity Database Manager");
             window.minSize = new Vector2(1280, 720);
             window.LoadSessionData();
         }
