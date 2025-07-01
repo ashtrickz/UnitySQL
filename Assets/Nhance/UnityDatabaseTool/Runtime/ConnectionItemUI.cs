@@ -3,35 +3,38 @@ using Nhance.UnityDatabaseTool.Data;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class ConnectionItemUI : MonoBehaviour
+namespace Nhance.UnityDatabaseTool.Runtime
 {
-    [SerializeField] private Text connectionNameText;
-    
-    [SerializeField] private Transform databaseLayoutGroup;
-    
-    [SerializeField] private Transform databaseItemTemplate;
-
-    public List<DatabaseItemUI> DatabaseItemUIs => databaseItemsUIs;
-    private List<DatabaseItemUI> databaseItemsUIs = new ();
-
-    public void Initialize(DatabaseConnection databaseConnection, GridDrawerUI gridDrawerUI)
+    public class ConnectionItemUI : MonoBehaviour
     {
-        connectionNameText.text = databaseConnection.Name;
-        
-        databaseConnection.Databases.ForEach(database =>
+        [SerializeField] private Text connectionNameText;
+    
+        [SerializeField] private Transform databaseLayoutGroup;
+    
+        [SerializeField] private Transform databaseItemTemplate;
+
+        public List<DatabaseItemUI> DatabaseItemUIs => databaseItemsUIs;
+        private List<DatabaseItemUI> databaseItemsUIs = new ();
+
+        public void Initialize(DatabaseConnection databaseConnection, GridDrawerUI gridDrawerUI)
         {
-            var databaseItemTransform = Instantiate(databaseItemTemplate, databaseLayoutGroup);
-            databaseItemTransform.TryGetComponent<DatabaseItemUI>(out var databaseItem);
-            databaseItem.Initialize(database, gridDrawerUI);
-            databaseItemsUIs.Add(databaseItem);
-        });
+            connectionNameText.text = databaseConnection.Name;
         
-        databaseLayoutGroup.gameObject.SetActive(false);
-    }
+            databaseConnection.Databases.ForEach(database =>
+            {
+                var databaseItemTransform = Instantiate(databaseItemTemplate, databaseLayoutGroup);
+                databaseItemTransform.TryGetComponent<DatabaseItemUI>(out var databaseItem);
+                databaseItem.Initialize(database, gridDrawerUI);
+                databaseItemsUIs.Add(databaseItem);
+            });
+        
+            databaseLayoutGroup.gameObject.SetActive(false);
+        }
 
-    public void ToggleSubmenu()
-    {
-        var state = databaseLayoutGroup.gameObject.activeSelf;
-        databaseLayoutGroup.gameObject.SetActive(!state);
+        public void ToggleSubmenu()
+        {
+            var state = databaseLayoutGroup.gameObject.activeSelf;
+            databaseLayoutGroup.gameObject.SetActive(!state);
+        }
     }
 }

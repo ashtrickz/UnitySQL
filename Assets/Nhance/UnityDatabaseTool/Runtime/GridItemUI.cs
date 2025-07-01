@@ -1,19 +1,22 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class GridItemUI : MonoBehaviour
+namespace Nhance.UnityDatabaseTool.Runtime
 {
-    [SerializeField] private Text text;
+    public class GridItemUI : MonoBehaviour
+    {
+        [SerializeField] private Text text;
 
-    public void Initialize(string stringData)
-    {
-        if (string.IsNullOrEmpty(stringData)) return;
-        var splitedString = stringData.Split('/');
-        text.text = splitedString.Length > 1 ? splitedString[splitedString.Length - 1] : stringData;
-    }
+        public void Initialize(string stringData)
+        {
+            if (string.IsNullOrEmpty(stringData)) return;
+            var splitedString = stringData.Split('/');
+            text.text = splitedString.Length > 1 ? splitedString[splitedString.Length - 1] : stringData;
+        }
     
-    public void InitializePK(string stringData)
-    {
-        text.text = $"PK {stringData}";
+        public void InitializePK(string stringData)
+        {
+            text.text = $"PK {stringData}";
+        }
     }
 }

@@ -1,31 +1,35 @@
 using System;
 using Nhance.UnityDatabaseTool.Data;
+using Nhance.UnityDatabaseTool.General;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class SQLQueryExecutorUI : MonoBehaviour
+namespace Nhance.UnityDatabaseTool.Runtime
 {
-    [SerializeField] private GridDrawerUI gridDrawer;
-    [SerializeField] private InputField inputField;
+    public class SQLQueryExecutorUI : MonoBehaviour
+    {
+        [SerializeField] private GridDrawerUI gridDrawer;
+        [SerializeField] private InputField inputField;
     
-    private Database database;
+        private Database database;
 
-    public Action<Database> OnDatabaseChange;
+        public Action<Database> OnDatabaseChange;
 
-    private void Awake()
-    {
-        OnDatabaseChange = database =>
+        private void Awake()
         {
-            this.database = database;
-        };
-    }
+            OnDatabaseChange = database =>
+            {
+                this.database = database;
+            };
+        }
 
-    public void ExecuteSQLQuery()
-    {
-        var sqlQuery = inputField.text;
-        database.SQLQuery = sqlQuery;
-        var result = SQLQueryHandler.ExecuteSQLQuery(database);
-        if (result != default)
-            gridDrawer.Draw(result);
+        public void ExecuteSQLQuery()
+        {
+            var sqlQuery = inputField.text;
+            database.SQLQuery = sqlQuery;
+            var result = SQLQueryHandler.ExecuteSQLQuery(database);
+            if (result != default)
+                gridDrawer.Draw(result);
+        }
     }
 }

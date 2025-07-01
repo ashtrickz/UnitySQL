@@ -4,71 +4,74 @@ using Nhance.UnityDatabaseTool.Data;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class AddRowModalUI : MonoBehaviour
+namespace Nhance.UnityDatabaseTool.Runtime
 {
-    [SerializeField] private Transform addRowItemsContainer;
-    
-    [SerializeField] private Button addButton;
-    
-    [SerializeField] private Button cancelButton;
-    
-    [SerializeField] private Transform addRowItemTemplate;
-    
-    private List<Database.TableColumn> tableColumns;
-    private List<AddRowItemUI> addRowItems = new ();
-
-    public Action OnAddRow;
-    public Action OnCancel;
-    
-    public void ShowModal(Database database, string tableName)
+    public class AddRowModalUI : MonoBehaviour
     {
-        tableColumns = database.GetTableColumns(tableName);
-        
-        tableColumns.ForEach(column =>
-        {
-            var itemTransform = Instantiate(addRowItemTemplate, addRowItemsContainer);
-            itemTransform.TryGetComponent<AddRowItemUI>(out var addRowItemUI);
-            addRowItemUI.Initialize(column.Name);
-            addRowItems.Add(addRowItemUI);
-        });
-        
-        addButton.onClick.AddListener(() =>
-        {
-            Dictionary<string, object> rowData = new ();
-            
-            Debug.Log($"tableColumns.Count: {tableColumns.Count}; addRowItems.Count : {addRowItems.Count}");
+        [SerializeField] private Transform addRowItemsContainer;
+    
+        [SerializeField] private Button addButton;
+    
+        [SerializeField] private Button cancelButton;
+    
+        [SerializeField] private Transform addRowItemTemplate;
+    
+        private List<Database.TableColumn> tableColumns;
+        private List<AddRowItemUI> addRowItems = new ();
 
-            for (int i = 0; i < addRowItems.Count; i++)
+        public Action OnAddRow;
+        public Action OnCancel;
+    
+        public void ShowModal(Database database, string tableName)
+        {
+            tableColumns = database.GetTableColumns(tableName);
+        
+            tableColumns.ForEach(column =>
             {
-                rowData.Add(tableColumns[i].Name, addRowItems[i].FieldText);
-            }
-
-            database.InsertRow(tableName, rowData);
-            
-            OnAddRow?.Invoke();
-            addButton.onClick.RemoveAllListeners();
-            cancelButton.onClick.RemoveAllListeners();
-            ClearModal();
-            gameObject.SetActive(false);
-        });
+                var itemTransform = Instantiate(addRowItemTemplate, addRowItemsContainer);
+                itemTransform.TryGetComponent<AddRowItemUI>(out var addRowItemUI);
+                addRowItemUI.Initialize(column.Name);
+                addRowItems.Add(addRowItemUI);
+            });
         
-        cancelButton.onClick.AddListener(() =>
-        {
-            OnCancel?.Invoke();
-            addButton.onClick.RemoveAllListeners();
-            cancelButton.onClick.RemoveAllListeners();
-            ClearModal();
-            gameObject.SetActive(false);
-        });
-    }
+            addButton.onClick.AddListener(() =>
+            {
+                Dictionary<string, object> rowData = new ();
+            
+                Debug.Log($"tableColumns.Count: {tableColumns.Count}; addRowItems.Count : {addRowItems.Count}");
 
-    private void ClearModal()
-    {
-        foreach (Transform child in addRowItemsContainer)
-        {
-            Destroy(child.gameObject);
+                for (int i = 0; i < addRowItems.Count; i++)
+                {
+                    rowData.Add(tableColumns[i].Name, addRowItems[i].FieldText);
+                }
+
+                database.InsertRow(tableName, rowData);
+            
+                OnAddRow?.Invoke();
+                addButton.onClick.RemoveAllListeners();
+                cancelButton.onClick.RemoveAllListeners();
+                ClearModal();
+                gameObject.SetActive(false);
+            });
+        
+            cancelButton.onClick.AddListener(() =>
+            {
+                OnCancel?.Invoke();
+                addButton.onClick.RemoveAllListeners();
+                cancelButton.onClick.RemoveAllListeners();
+                ClearModal();
+                gameObject.SetActive(false);
+            });
         }
-        addRowItems = new ();
-        tableColumns = new();
+
+        private void ClearModal()
+        {
+            foreach (Transform child in addRowItemsContainer)
+            {
+                Destroy(child.gameObject);
+            }
+            addRowItems = new ();
+            tableColumns = new();
+        }
     }
 }

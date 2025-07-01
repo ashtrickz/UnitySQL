@@ -1,17 +1,19 @@
 using UnityEngine;
-using UnityEngine.Serialization;
 using UnityEngine.UI;
 
-public class AddRowItemUI : MonoBehaviour
+namespace Nhance.UnityDatabaseTool.Runtime
 {
-    [SerializeField] private Text fieldNaming;
-    
-    [SerializeField] private InputField inputField;
-
-    public void Initialize(string fieldName)
+    public class AddRowItemUI : MonoBehaviour
     {
-        fieldNaming.text = fieldName;
-    }
+        [SerializeField] private Text fieldNaming;
     
-    public string FieldText => inputField.text;
+        [SerializeField] private InputField inputField;
+
+        public void Initialize(string fieldName)
+        {
+            fieldNaming.text = fieldName;
+        }
+    
+        public string FieldText => inputField.text;
+    }
 }
