@@ -7,14 +7,14 @@ using UnityEngine.Networking;
 
 namespace Nhance.UnityDatabaseTool.AiProviders
 {
-    public class GroqAIProvider : IAIProvider
+    public class LamaAIProvider : IAIProvider
     {
         private readonly string apiKey;
         private readonly string endpoint;
 
-        public string Name => "Groq";
+        public string Name => "NVIDIA (Nemotron)";
 
-        public GroqAIProvider(string apiKey, string endpoint = "https://api.groq.com/openai/v1/chat/completions")
+        public LamaAIProvider(string apiKey = "", string endpoint = "http://localhost:11434/v1/chat/completions")
         {
             this.apiKey = apiKey;
             this.endpoint = endpoint;
@@ -35,7 +35,7 @@ namespace Nhance.UnityDatabaseTool.AiProviders
 
             var payload = new
             {
-                model = "mixtral-8x7b-32768", // or llama3-8b-8192
+                model = "nemotron",
                 messages,
                 temperature = 0.5
             };
@@ -48,14 +48,13 @@ namespace Nhance.UnityDatabaseTool.AiProviders
                 request.uploadHandler = new UploadHandlerRaw(bodyRaw);
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
-                request.SetRequestHeader("Authorization", $"Bearer {apiKey}");
+                if (!string.IsNullOrEmpty(apiKey))
+                    request.SetRequestHeader("Authorization", $"Bearer {apiKey}");
 
                 yield return request.SendWebRequest();
 
                 if (request.result != UnityWebRequest.Result.Success)
-                {
                     onResponse?.Invoke("Error: " + request.error);
-                }
                 else
                 {
                     var responseJson = request.downloadHandler.text;
@@ -64,6 +63,6 @@ namespace Nhance.UnityDatabaseTool.AiProviders
                 }
             }
         }
-
     }
 }
+

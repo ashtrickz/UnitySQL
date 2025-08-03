@@ -7,14 +7,14 @@ using UnityEngine.Networking;
 
 namespace Nhance.UnityDatabaseTool.AiProviders
 {
-    public class OpenAIProvider : IAIProvider
+    public class DSAIProvider : IAIProvider
     {
         private readonly string apiKey;
         private readonly string endpoint;
 
-        public string Name => "OpenAI";
+        public string Name => "DeepSeek";
 
-        public OpenAIProvider(string apiKey, string endpoint = "https://api.openai.com/v1/chat/completions")
+        public DSAIProvider(string apiKey, string endpoint = "https://api.deepseek.com/v1/chat/completions")
         {
             this.apiKey = apiKey;
             this.endpoint = endpoint;
@@ -35,7 +35,7 @@ namespace Nhance.UnityDatabaseTool.AiProviders
 
             var payload = new
             {
-                model = "gpt-4",
+                model = "deepseek-chat",
                 messages,
                 temperature = 0.5
             };
@@ -53,7 +53,9 @@ namespace Nhance.UnityDatabaseTool.AiProviders
                 yield return request.SendWebRequest();
 
                 if (request.result != UnityWebRequest.Result.Success)
+                {
                     onResponse?.Invoke("Error: " + request.error);
+                }
                 else
                 {
                     var responseJson = request.downloadHandler.text;
@@ -64,3 +66,4 @@ namespace Nhance.UnityDatabaseTool.AiProviders
         }
     }
 }
+

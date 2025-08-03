@@ -124,10 +124,10 @@ namespace Nhance.UnityDatabaseTool.Editor
         {
             aiProviders = new List<IAIProvider>
             {
-                new OpenAIProvider(aiApiKey),
-                new GroqAIProvider(aiApiKey),
-                new DeepSeekAIProvider(aiApiKey),
-                new NvidiaAIProvider(aiApiKey)
+                new ChatAIProvider(aiApiKey),
+                new GrokAIProvider(aiApiKey),
+                new DSAIProvider(aiApiKey),
+                new LamaAIProvider(aiApiKey)
             };
         }
 
@@ -1942,8 +1942,6 @@ namespace Nhance.UnityDatabaseTool.Editor
                             }
                         }
                     }
-                    break;
-
                     break;
             }
 

@@ -27,8 +27,8 @@ namespace Nhance.UnityDatabaseTool.Data
 
             provider = type switch
             {
-                EConnectionType.SQLite => new SqliteProvider(connectionString),
-                EConnectionType.MySQL => new MySqlProvider(connectionString),
+                EConnectionType.SQLite => new LiteProvider(connectionString),
+                EConnectionType.MySQL => new MariaProvider(connectionString),
                 _ => null
             };
 

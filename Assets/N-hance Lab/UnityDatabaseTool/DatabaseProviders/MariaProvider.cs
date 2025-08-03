@@ -5,13 +5,12 @@ using System.Linq;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Nhance.UnityDatabaseTool.Data;
-using Unity.VisualScripting;
 using UnityEditor;
 using UnityEngine;
 
 namespace Nhance.UnityDatabaseTool.DatabaseProviders
 {
-    public class MySqlProvider : IDatabaseProvider
+    public class MariaProvider : IDatabaseProvider
     {
         private MySqlConnection _connection;
         private readonly string _connectionString;
@@ -19,7 +18,7 @@ namespace Nhance.UnityDatabaseTool.DatabaseProviders
 
         private List<Table> _tables = new();
 
-        public MySqlProvider(string connectionString)
+        public MariaProvider(string connectionString)
         {
             try
             {

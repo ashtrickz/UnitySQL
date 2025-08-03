@@ -10,12 +10,12 @@ using UnityEngine;
 
 namespace Nhance.UnityDatabaseTool.DatabaseProviders
 {
-    public class SqliteProvider : IDatabaseProvider
+    public class LiteProvider : IDatabaseProvider
     {
         private SqliteConnection _connection;
         private readonly string _connectionString;
         private List<Table> _tables = new();
-        public SqliteProvider(string connectionString) => _connectionString = connectionString;
+        public LiteProvider(string connectionString) => _connectionString = connectionString;
 
         public string GetAssetPath(UnityEngine.Object assetObject)
         {
